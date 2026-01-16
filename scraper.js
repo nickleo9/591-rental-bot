@@ -325,7 +325,7 @@ async function scrape591(options = {}) {
             console.log(`📍 URL: ${logUrl}`);
 
             // 記錄 Log
-            let logEntry = `🏙️ 正在爬取: ${target.name}\n📍 <${logUrl}|連結>`;
+            let logEntry = `🏙️ 正在爬取: ${target.name}\n📍 ${logUrl}`;
 
             const listings = await scrapeRegion(page, target.region, target.section, minRent, maxRent);
             console.log(`   找到 ${listings.length} 間物件`);
