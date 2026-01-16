@@ -18,6 +18,9 @@ const { scrape591, buildSearchUrl, SEARCH_CONFIG: ScraperConfig } = require('./s
 const { sendListingsNotification, handlePostback, client: lineClient, startLoading } = require('./linebot');
 const { saveListings, markAsInterested, initSheets } = require('./sheets');
 
+const app = express();
+const PORT = process.env.PORT || 3000;
+
 // 搜尋設定（可透過 LINE 動態調整）
 // 初始化預設值
 const SEARCH_CONFIG = {
