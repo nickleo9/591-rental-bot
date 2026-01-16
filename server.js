@@ -87,7 +87,11 @@ async function runCrawlTask(manual = false) {
             await lineClient.broadcast({
                 messages: [{ type: 'text', text: message }]
             });
-            await lineClient.sendFlexMessage(newListings);
+
+            // 使用 sendListingsNotification 發送 Flex Message 給所有訂閱用戶
+            for (const userId of subscribedUsers) {
+                await sendListingsNotification(userId, newListings);
+            }
         } else {
             // 沒有新物件也要發送通知
             const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
