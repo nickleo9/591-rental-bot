@@ -161,7 +161,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&title=${encodeURIComponent(listing.title.substring(0, 30))}&price=${listing.price}`
+                        data: `action=interested&id=${listing.id}&price=${listing.price}`
                     },
                     color: '#27AE60'
                 }
@@ -233,22 +233,20 @@ async function handlePostback(event) {
 
     if (action === 'interested') {
         const id = data.get('id');
-        const title = decodeURIComponent(data.get('title') || '');
         const price = data.get('price');
 
-        // 回覆確認訊息
+        // 回覆確認訊息 (不依賴 title)
         await client.replyMessage({
             replyToken: event.replyToken,
             messages: [{
                 type: 'text',
-                text: `✅ 已將「${title}」加入你的待看清單！\n💰 ${parseInt(price).toLocaleString()} 元/月\n\n物件連結：https://rent.591.com.tw/${id}`
+                text: `✅ 已加入待看清單！\n💰 ${parseInt(price).toLocaleString()} 元/月\n\n🔗 物件連結：https://rent.591.com.tw/${id}`
             }]
         });
 
         return {
             action: 'interested',
             id,
-            title,
             price: parseInt(price),
             timestamp: new Date().toISOString()
         };
