@@ -98,9 +98,7 @@ async function runCrawlTask(manual = false) {
     }
 }
 
-return { status: 'error', error: error.message };
-        }
-    }
+
 
 // ============================================
 // Express 路由
