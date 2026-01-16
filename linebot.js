@@ -57,9 +57,15 @@ function formatListing(listing, index) {
 
     const bubbles = [];
 
-    // 如果有多張圖片，先建立圖片輪播 bubbles (最多 3 張)
-    const images = listing.images || (listing.image ? [listing.image] : []);
-    const imagesToShow = images.slice(0, 3); // 限制最多 3 張
+    // 過濾有效的圖片 URL (必須是 https 且長度 < 2000)
+    const allImages = listing.images || (listing.image ? [listing.image] : []);
+    const validImages = allImages.filter(url =>
+        url &&
+        url.startsWith('https://') &&
+        url.length < 2000 &&
+        !url.includes('data:')
+    );
+    const imagesToShow = validImages.slice(0, 3); // 限制最多 3 張
 
     imagesToShow.forEach((imgUrl, imgIndex) => {
         bubbles.push({
