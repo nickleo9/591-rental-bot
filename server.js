@@ -13,7 +13,7 @@ require('dotenv').config();
 const express = require('express');
 const cron = require('node-cron');
 const { scrape591 } = require('./scraper');
-const { sendListingsNotification, handlePostback, client } = require('./linebot');
+const { sendListingsNotification, handlePostback, client, startLoading } = require('./linebot');
 const { saveListings, markAsInterested, initSheets } = require('./sheets');
 
 const app = express();
@@ -218,6 +218,8 @@ app.post('/webhook', express.json(), async (req, res) => {
                         }
                         // 手動搜尋
                         else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
+                            // 顯示 Loading 動畫
+                            await startLoading(event.source.userId, 40);
                             await replyText(event.replyToken, '🔍 正在搜尋中，請稍候...');
                             runCrawlTask();
                         }

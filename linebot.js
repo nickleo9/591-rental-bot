@@ -17,6 +17,34 @@ const client = new messagingApi.MessagingApiClient({
 });
 
 /**
+ * 顯示 Loading 動畫
+ * 讓使用者知道 Bot 正在處理中
+ * @param {string} userId - LINE 用戶 ID
+ * @param {number} seconds - 顯示秒數 (5-60)
+ */
+async function startLoading(userId, seconds = 20) {
+    try {
+        const response = await fetch('https://api.line.me/v2/bot/chat/loading/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${config.channelAccessToken}`
+            },
+            body: JSON.stringify({
+                chatId: userId,
+                loadingSeconds: Math.min(Math.max(seconds, 5), 60) // 限制在 5-60 秒
+            })
+        });
+
+        if (!response.ok) {
+            console.error('Loading 動畫啟動失敗:', response.status);
+        }
+    } catch (error) {
+        console.error('Loading 動畫錯誤:', error.message);
+    }
+}
+
+/**
  * 格式化單一物件訊息
  */
 function formatListing(listing, index) {
@@ -255,5 +283,6 @@ module.exports = {
     handlePostback,
     lineMiddleware,
     getUserProfile,
+    startLoading,
     config
 };
