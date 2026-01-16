@@ -148,9 +148,9 @@ app.post('/webhook', express.json(), async (req, res) => {
                         const lowerText = text.toLowerCase();
 
                         // 指令列表
-                        if (lowerText === '指令' || lowerText === '說明' || lowerText === 'help') {
+                        if (lowerText === '指令' || lowerText === '說明' || lowerText === 'help' || lowerText === '/h') {
                             await replyText(event.replyToken,
-                                `📋 可用指令：
+                                `📋 可用指令（輸入 /h 顯示此選單）：
 
 🔍 搜尋指令：
 • 搜尋 / 找房 - 立即搜尋
