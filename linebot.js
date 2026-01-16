@@ -161,7 +161,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&title=${encodeURIComponent(listing.title)}&price=${listing.price}`
+                        data: `action=interested&id=${listing.id}&title=${encodeURIComponent(listing.title.substring(0, 30))}&price=${listing.price}`
                     },
                     color: '#27AE60'
                 }
