@@ -13,19 +13,21 @@ require('dotenv').config();
 const line = require('@line/bot-sdk');
 const express = require('express');
 const cron = require('node-cron');
-// 搜尋設定（可透過 LINE 動態調整）
-const SEARCH_CONFIG = {
-    regions: (process.env.SEARCH_REGIONS || '1,3').split(',').map(Number),
-    minRent: parseInt(process.env.MIN_RENT) || 8000,
-    maxRent: parseInt(process.env.MAX_RENT) || 12000
-};
-
-const app = express();
-const PORT = process.env.PORT || 3000;
+// 引入其他模組
+const { scrape591, buildSearchUrl, SEARCH_CONFIG: ScraperConfig } = require('./scraper');
+const { sendListingsNotification, handlePostback, client: lineClient, startLoading } = require('./linebot');
+const { saveListings, markAsInterested, initSheets } = require('./sheets');
 
 // 搜尋設定（可透過 LINE 動態調整）
+// 初始化預設值
 const SEARCH_CONFIG = {
-    regions: (process.env.SEARCH_REGIONS || '1,3').split(',').map(Number),
+    // 預設鎖定區域: 中正(1), 中山(3), 大同(2), 永和(37)
+    targets: [
+        { region: 1, section: 1, name: '台北市-中正區' },
+        { region: 1, section: 3, name: '台北市-中山區' },
+        { region: 1, section: 2, name: '台北市-大同區' },
+        { region: 3, section: 37, name: '新北市-永和區' }
+    ],
     minRent: parseInt(process.env.MIN_RENT) || 8000,
     maxRent: parseInt(process.env.MAX_RENT) || 12000
 };
