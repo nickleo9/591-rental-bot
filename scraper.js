@@ -337,8 +337,14 @@ async function scrape591(options = {}) {
             // 記錄 Log
             let logEntry = `🏙️ 正在爬取: ${target.name}\n📍 ${logUrl}`;
 
+            // 即時通知：開始爬取該區
+            if (onProgress) onProgress(`🏙️ 正在爬取: ${target.name}...`);
+
             const listings = await scrapeRegion(page, target.region, target.section, minRent, maxRent);
             console.log(`   找到 ${listings.length} 間物件`);
+
+            // 即時通知：該區結果
+            if (onProgress) onProgress(`✅ ${target.name} - 找到 ${listings.length} 間物件`);
 
             // 新增結果 Log
             logEntry += `\n   找到 ${listings.length} 間物件`;
