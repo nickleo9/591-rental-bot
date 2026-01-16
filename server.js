@@ -92,22 +92,35 @@ async function runCrawlTask(manual = false) {
         // 準備 Log 訊息
         const logMessage = logs.length > 0 ? logs.join('\n') + '\n\n' : '';
 
-        // 3. 發送通知 (強制通知，即使沒有新物件)
-        // 3. 發送通知 (強制通知，即使沒有新物件)
+        // 3. 發送通知
         if (newListings.length > 0) {
-            const message = `${logMessage}🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
+            // 有新物件：發送新物件通知
+            const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
             await lineClient.broadcast({
                 messages: [{ type: 'text', text: message }]
             });
 
-            // 使用 sendListingsNotification 發送 Flex Message 給所有訂閱用戶
+            // 發送 Flex Message 給所有訂閱用戶
             for (const userId of subscribedUsers) {
                 await sendListingsNotification(userId, newListings);
             }
-        } else {
-            // 沒有新物件也要發送通知
+        } else if (manual && listings.length > 0) {
+            // 手動搜尋且無新物件：顯示全部結果
             const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
-            const message = `${logMessage}📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${targetNames})`;
+            const message = `📋 目前沒有新物件，但為您列出資料庫中的 ${listings.length} 間物件：\n(監控區域: ${targetNames})`;
+            await lineClient.broadcast({
+                messages: [{ type: 'text', text: message }]
+            });
+
+            // 發送 Flex Message (最多 10 間，避免洗版)
+            const listingsToShow = listings.slice(0, 10);
+            for (const userId of subscribedUsers) {
+                await sendListingsNotification(userId, listingsToShow);
+            }
+        } else {
+            // 沒有新物件（自動排程）
+            const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
+            const message = `📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${targetNames})`;
             await lineClient.broadcast({
                 messages: [{ type: 'text', text: message }]
             });
