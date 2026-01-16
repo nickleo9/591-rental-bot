@@ -170,7 +170,72 @@ async function scrapeRegion(page, region, section, minRent, maxRent) {
     }
 }
 
-// ... (省略 autoScroll 和 getListingDetails) ...
+/**
+ * 自動滾動頁面以載入更多內容
+ */
+async function autoScroll(page) {
+    await page.evaluate(async () => {
+        await new Promise((resolve) => {
+            let totalHeight = 0;
+            const distance = 500;
+            const timer = setInterval(() => {
+                const scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+
+                if (totalHeight >= scrollHeight - window.innerHeight || totalHeight > 3000) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, 200);
+        });
+    });
+
+    // 等待新內容載入
+    await page.waitForTimeout(1000);
+}
+
+/**
+ * 取得物件詳細資訊
+ */
+async function getListingDetails(page, url) {
+    try {
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+
+        const details = await page.evaluate(() => {
+            // 設備列表
+            const equipments = [];
+            document.querySelectorAll('.service-list-item, .facility span, .icon-item').forEach(el => {
+                const text = el.textContent?.trim();
+                if (text) equipments.push(text);
+            });
+
+            // 屋主說明（檢查乾濕分離）
+            const descEl = document.querySelector('.house-intro, .description, .info-content');
+            const description = descEl?.textContent?.trim() || '';
+
+            // 是否有乾濕分離
+            const hasDryWetSeparation = description.includes('乾濕分離') ||
+                equipments.some(e => e.includes('乾濕分離'));
+
+            // 捷運距離
+            const subwayInfo = document.querySelector('.traffic-info, .metro-info, .subway-distance');
+            const subwayDistance = subwayInfo?.textContent?.trim() || '';
+
+            return {
+                equipments,
+                description: description.substring(0, 500),
+                hasDryWetSeparation,
+                subwayDistance
+            };
+        });
+
+        return details;
+    } catch (e) {
+        console.error(`取得詳情失敗: ${url}`, e.message);
+        return null;
+    }
+}
 
 /**
  * 主要爬蟲函數
