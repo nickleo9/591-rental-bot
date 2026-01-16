@@ -286,35 +286,55 @@ async function handlePostback(event) {
             }]
         });
 
-        // 抓取聯絡資訊
-        let contactInfo = { phone: '', line: '', landlordName: '' };
+        // 抓取聯絡資訊 (包含標題和地址)
+        let contactInfo = { phone: '', line: '', landlordName: '', title: '', address: '' };
         try {
             contactInfo = await getContactInfo(id);
         } catch (e) {
             console.error('抓取聯絡資訊失敗:', e);
         }
 
-        // 組合聯絡資訊訊息
-        let contactMessage = '';
+        // 組合回覆訊息
+        let replyParts = [];
+
+        // 標題
+        if (contactInfo.title) {
+            replyParts.push(`🏠 ${contactInfo.title}`);
+        }
+
+        // 租金
+        replyParts.push(`💰 ${parseInt(price).toLocaleString()} 元/月`);
+
+        // 地址
+        if (contactInfo.address) {
+            replyParts.push(`📍 ${contactInfo.address}`);
+        }
+
+        // 聯絡資訊
+        replyParts.push(''); // 空行
         if (contactInfo.landlordName) {
-            contactMessage += `👤 房東：${contactInfo.landlordName}\n`;
+            replyParts.push(`👤 聯絡人：${contactInfo.landlordName}`);
         }
         if (contactInfo.phone) {
-            contactMessage += `📞 電話：${contactInfo.phone}\n`;
+            replyParts.push(`📞 電話：${contactInfo.phone}`);
         }
         if (contactInfo.line) {
-            contactMessage += `💬 LINE：${contactInfo.line}\n`;
+            replyParts.push(`💬 LINE：${contactInfo.line}`);
         }
-        if (!contactMessage) {
-            contactMessage = '⚠️ 無法取得聯絡資訊，請直接點擊連結查看\n';
+        if (!contactInfo.phone && !contactInfo.line) {
+            replyParts.push('⚠️ 無法取得聯絡方式，請點連結查看');
         }
+
+        // 連結
+        replyParts.push('');
+        replyParts.push(`🔗 https://rent.591.com.tw/${id}`);
 
         // 發送詳細訊息 (使用 push 因為 reply token 已用過)
         await client.pushMessage({
             to: event.source.userId,
             messages: [{
                 type: 'text',
-                text: `✅ 已加入待看清單！\n\n${contactMessage}\n💰 ${parseInt(price).toLocaleString()} 元/月\n🔗 https://rent.591.com.tw/${id}`
+                text: `✅ 已加入待看清單！\n\n${replyParts.join('\n')}`
             }]
         });
 
@@ -322,6 +342,8 @@ async function handlePostback(event) {
             action: 'interested',
             id,
             price: parseInt(price),
+            title: contactInfo.title,
+            address: contactInfo.address,
             contactInfo,
             timestamp: new Date().toISOString()
         };

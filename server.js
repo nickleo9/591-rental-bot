@@ -401,8 +401,14 @@ app.post('/webhook', express.json(), async (req, res) => {
                     const result = await handlePostback(event);
 
                     if (result && result.action === 'interested') {
-                        // 標記為有興趣 (含聯絡資訊)
-                        await markAsInterested(result.id, result.price, result.contactInfo);
+                        // 標記為有興趣 (含完整資訊)
+                        await markAsInterested(
+                            result.id,
+                            result.price,
+                            result.title,
+                            result.address,
+                            result.contactInfo
+                        );
                     }
                     break;
 

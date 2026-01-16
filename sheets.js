@@ -160,25 +160,33 @@ async function getExistingIds() {
 }
 
 /**
- * 標記物件為「有興趣」(含聯絡資訊)
+ * 標記物件為「有興趣」(含完整資訊)
+ * @param {string} listingId - 物件 ID
+ * @param {number} price - 租金
+ * @param {string} title - 物件標題
+ * @param {string} address - 物件地址
+ * @param {object} contactInfo - 聯絡資訊 {phone, line, landlordName}
  */
-async function markAsInterested(listingId, price, contactInfo = {}) {
+async function markAsInterested(listingId, price, title = '', address = '', contactInfo = {}) {
     const sheets = await initSheets();
     await ensureSheetExists(SHEETS.INTERESTED);
 
     const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
     const { phone = '', line = '', landlordName = '' } = contactInfo;
 
-    // 添加到「有興趣」工作表 (含聯絡資訊欄位)
+    // 添加到「有興趣」工作表 (10 欄完整資訊)
+    // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.INTERESTED}!A:H`,
+        range: `${SHEETS.INTERESTED}!A:J`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
             values: [[
                 listingId,
+                title,
                 price,
+                address,
                 `https://rent.591.com.tw/${listingId}`,
                 landlordName,
                 phone,
@@ -192,7 +200,7 @@ async function markAsInterested(listingId, price, contactInfo = {}) {
     // 更新主工作表的狀態
     await updateListingStatus(listingId, '有興趣 ⭐');
 
-    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(電話: ${phone}, LINE: ${line})`);
+    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(標題: ${title}, 電話: ${phone})`);
     return true;
 }
 

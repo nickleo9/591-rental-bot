@@ -503,7 +503,46 @@ async function getContactInfo(listingId) {
                 }
             }
 
-            return { phone, line, landlordName };
+            // 物件標題
+            let title = '';
+            const titleSelectors = [
+                'h1.title',
+                '.house-title',
+                '.detail-title',
+                'h1'
+            ];
+            for (const sel of titleSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    title = el.textContent?.trim() || '';
+                    if (title) break;
+                }
+            }
+
+            // 物件地址
+            let address = '';
+            const addressSelectors = [
+                '.address',
+                '.house-address',
+                '.detail-address',
+                '.info-address'
+            ];
+            for (const sel of addressSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    address = el.textContent?.trim() || '';
+                    if (address) break;
+                }
+            }
+            // 也嘗試從麵包屑或其他區域提取地址
+            if (!address) {
+                const breadcrumb = document.querySelector('.breadcrumb, .region-info');
+                if (breadcrumb) {
+                    address = breadcrumb.textContent?.trim().replace(/\s+/g, ' ') || '';
+                }
+            }
+
+            return { phone, line, landlordName, title, address };
         });
 
         console.log(`✅ 聯絡資訊: ${JSON.stringify(contactInfo)}`);
