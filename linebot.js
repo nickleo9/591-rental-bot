@@ -4,6 +4,7 @@
  */
 
 const { Client, messagingApi, middleware } = require('@line/bot-sdk');
+const { getContactInfo } = require('./scraper');
 
 // LINE Bot 設定
 const config = {
@@ -255,12 +256,44 @@ async function handlePostback(event) {
         const id = data.get('id');
         const price = data.get('price');
 
-        // 回覆確認訊息 (不依賴 title)
+        // 先回覆確認訊息 (讓用戶知道正在處理)
         await client.replyMessage({
             replyToken: event.replyToken,
             messages: [{
                 type: 'text',
-                text: `✅ 已加入待看清單！\n💰 ${parseInt(price).toLocaleString()} 元/月\n\n🔗 物件連結：https://rent.591.com.tw/${id}`
+                text: `⏳ 正在為您抓取聯絡資訊，請稍候...`
+            }]
+        });
+
+        // 抓取聯絡資訊
+        let contactInfo = { phone: '', line: '', landlordName: '' };
+        try {
+            contactInfo = await getContactInfo(id);
+        } catch (e) {
+            console.error('抓取聯絡資訊失敗:', e);
+        }
+
+        // 組合聯絡資訊訊息
+        let contactMessage = '';
+        if (contactInfo.landlordName) {
+            contactMessage += `👤 房東：${contactInfo.landlordName}\n`;
+        }
+        if (contactInfo.phone) {
+            contactMessage += `📞 電話：${contactInfo.phone}\n`;
+        }
+        if (contactInfo.line) {
+            contactMessage += `💬 LINE：${contactInfo.line}\n`;
+        }
+        if (!contactMessage) {
+            contactMessage = '⚠️ 無法取得聯絡資訊，請直接點擊連結查看\n';
+        }
+
+        // 發送詳細訊息 (使用 push 因為 reply token 已用過)
+        await client.pushMessage({
+            to: event.source.userId,
+            messages: [{
+                type: 'text',
+                text: `✅ 已加入待看清單！\n\n${contactMessage}\n💰 ${parseInt(price).toLocaleString()} 元/月\n🔗 https://rent.591.com.tw/${id}`
             }]
         });
 
@@ -268,6 +301,7 @@ async function handlePostback(event) {
             action: 'interested',
             id,
             price: parseInt(price),
+            contactInfo,
             timestamp: new Date().toISOString()
         };
     }

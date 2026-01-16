@@ -395,9 +395,125 @@ async function scrape591(options = {}) {
     return { listings: allListings, logs: executionLogs };
 }
 
+/**
+ * 取得物件聯絡資訊
+ * @param {string} listingId - 591 物件 ID
+ * @returns {Promise<{phone: string, line: string, landlordName: string}>}
+ */
+async function getContactInfo(listingId) {
+    const url = `https://rent.591.com.tw/${listingId}`;
+    console.log(`📞 正在抓取聯絡資訊: ${url}`);
+
+    await ensureBrowserInstalled();
+
+    const browser = await chromium.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    try {
+        const context = await browser.newContext({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            viewport: { width: 1920, height: 1080 }
+        });
+
+        const page = await context.newPage();
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+
+        // 等待頁面載入
+        await page.waitForTimeout(2000);
+
+        // 嘗試點擊「顯示電話」按鈕 (如果有)
+        try {
+            const showPhoneBtn = await page.$('.phone-show, .show-phone, [data-phone], button:has-text("電話")');
+            if (showPhoneBtn) {
+                await showPhoneBtn.click();
+                await page.waitForTimeout(1000);
+            }
+        } catch (e) {
+            // 按鈕可能不存在，繼續
+        }
+
+        // 抓取聯絡資訊
+        const contactInfo = await page.evaluate(() => {
+            let phone = '';
+            let line = '';
+            let landlordName = '';
+
+            // 電話號碼 (多種可能的選擇器)
+            const phoneSelectors = [
+                '.phone-number',
+                '.landlord-phone',
+                '.contact-phone',
+                '[data-phone]',
+                '.phone-txt',
+                '.info-host-word a[href^="tel:"]'
+            ];
+            for (const sel of phoneSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    const text = el.textContent?.trim() || el.getAttribute('href')?.replace('tel:', '') || '';
+                    if (text && /\d{4,}/.test(text)) {
+                        phone = text;
+                        break;
+                    }
+                }
+            }
+
+            // LINE ID
+            const lineSelectors = [
+                '.line-id',
+                '.contact-line',
+                '[data-line]'
+            ];
+            for (const sel of lineSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    line = el.textContent?.trim() || '';
+                    break;
+                }
+            }
+            // 也檢查頁面文字中是否有 LINE
+            if (!line) {
+                const pageText = document.body.innerText || '';
+                const lineMatch = pageText.match(/LINE\s*[:：]\s*(\S+)/i);
+                if (lineMatch) {
+                    line = lineMatch[1];
+                }
+            }
+
+            // 房東姓名
+            const nameSelectors = [
+                '.landlord-name',
+                '.host-name',
+                '.info-host-label'
+            ];
+            for (const sel of nameSelectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    landlordName = el.textContent?.trim() || '';
+                    break;
+                }
+            }
+
+            return { phone, line, landlordName };
+        });
+
+        console.log(`✅ 聯絡資訊: ${JSON.stringify(contactInfo)}`);
+        return contactInfo;
+
+    } catch (error) {
+        console.error('❌ 抓取聯絡資訊失敗:', error.message);
+        return { phone: '', line: '', landlordName: '' };
+    } finally {
+        await browser.close();
+    }
+}
+
 module.exports = {
     scrape591,
     buildSearchUrl,
     getListingDetails,
+    getContactInfo,
     SEARCH_CONFIG
 };

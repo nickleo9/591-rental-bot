@@ -378,8 +378,8 @@ app.post('/webhook', express.json(), async (req, res) => {
                     const result = await handlePostback(event);
 
                     if (result && result.action === 'interested') {
-                        // 標記為有興趣
-                        await markAsInterested(result.id, result.title, result.price);
+                        // 標記為有興趣 (含聯絡資訊)
+                        await markAsInterested(result.id, result.price, result.contactInfo);
                     }
                     break;
 

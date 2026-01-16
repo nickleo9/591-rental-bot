@@ -160,27 +160,31 @@ async function getExistingIds() {
 }
 
 /**
- * 標記物件為「有興趣」
+ * 標記物件為「有興趣」(含聯絡資訊)
  */
-async function markAsInterested(listingId, title, price) {
+async function markAsInterested(listingId, price, contactInfo = {}) {
     const sheets = await initSheets();
     await ensureSheetExists(SHEETS.INTERESTED);
 
     const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+    const { phone = '', line = '', landlordName = '' } = contactInfo;
 
-    // 添加到「有興趣」工作表
+    // 添加到「有興趣」工作表 (含聯絡資訊欄位)
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.INTERESTED}!A:E`,
+        range: `${SHEETS.INTERESTED}!A:H`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
             values: [[
                 listingId,
-                title,
                 price,
                 `https://rent.591.com.tw/${listingId}`,
-                timestamp
+                landlordName,
+                phone,
+                line,
+                timestamp,
+                '待聯繫'
             ]]
         }
     });
@@ -188,7 +192,7 @@ async function markAsInterested(listingId, title, price) {
     // 更新主工作表的狀態
     await updateListingStatus(listingId, '有興趣 ⭐');
 
-    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」`);
+    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(電話: ${phone}, LINE: ${line})`);
     return true;
 }
 
