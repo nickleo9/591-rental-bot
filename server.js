@@ -10,11 +10,15 @@
 
 require('dotenv').config();
 
+const line = require('@line/bot-sdk');
 const express = require('express');
 const cron = require('node-cron');
-const { scrape591 } = require('./scraper');
-const { sendListingsNotification, handlePostback, client, startLoading } = require('./linebot');
-const { saveListings, markAsInterested, initSheets } = require('./sheets');
+// 搜尋設定（可透過 LINE 動態調整）
+const SEARCH_CONFIG = {
+    regions: (process.env.SEARCH_REGIONS || '1,3').split(',').map(Number),
+    minRent: parseInt(process.env.MIN_RENT) || 8000,
+    maxRent: parseInt(process.env.MAX_RENT) || 12000
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -182,8 +186,12 @@ app.post('/webhook', express.json(), async (req, res) => {
 🎮【指令操作】
 1️⃣ 輸入「搜尋」→ 立即爬取 (手動強制檢查)
 2️⃣ 輸入「狀態」→ 看目前設定
-3️⃣ 輸入「地區 台北/新北/全部」
-   (💡 切換為大範圍搜尋，暫不支援指令指定特定行政區，如需修改特定區域請聯絡開發者)
+3️⃣ 輸入「地區 [名稱]」
+   • 「地區 中山」 (只搜中山)
+   • 「地區 淡水」 (只搜淡水)
+   • 「地區 中山 永和」 (同时搜多區)
+   • 「地區 預設」 (回歸預設四區)
+   • 「地區 台北/新北/全」 (大範圍)
 4️⃣ 輸入「租金 8000-15000」
 
 🔘【按鈕功能】
@@ -229,19 +237,83 @@ app.post('/webhook', express.json(), async (req, res) => {
                         }
                         // 調整地區
                         else if (text.startsWith('地區')) {
-                            const area = text.replace('地區', '').trim();
-                            if (area.includes('台北') && !area.includes('新北')) {
-                                SEARCH_CONFIG.regions = [1];
-                                await replyText(event.replyToken, '✅ 已設定只搜尋台北市');
-                            } else if (area.includes('新北') && !area.includes('台北')) {
-                                SEARCH_CONFIG.regions = [3];
-                                await replyText(event.replyToken, '✅ 已設定只搜尋新北市');
-                            } else if (area.includes('全') || (area.includes('台北') && area.includes('新北'))) {
-                                SEARCH_CONFIG.regions = [1, 3];
-                                await replyText(event.replyToken, '✅ 已設定搜尋台北市 + 新北市');
-                            } else {
-                                await replyText(event.replyToken, '❌ 請輸入：地區 台北 / 地區 新北 / 地區 全部');
+                            const fullArgs = text.replace('地區', '').trim();
+
+                            if (fullArgs === '') {
+                                return replyText(event.replyToken, '❓ 請輸入地區名稱，例如：「地區 中山」、「地區 淡水」或「地區 預設」');
                             }
+
+                            const args = fullArgs.split(/\s+/); // 支援多個地區空格分隔
+                            let message = '';
+
+                            if (args[0] === '預設') {
+                                // 回復預設
+                                SEARCH_CONFIG.targets = [
+                                    { region: 1, section: 1, name: '台北市-中正區' },
+                                    { region: 1, section: 3, name: '台北市-中山區' },
+                                    { region: 1, section: 2, name: '台北市-大同區' },
+                                    { region: 3, section: 37, name: '新北市-永和區' }
+                                ];
+                                message = '✅ 已恢復【預設監控區域】：中正、中山、大同、永和';
+                            } else if (args[0] === '全' || args[0] === '全部') {
+                                // 全區 (台北+新北)
+                                SEARCH_CONFIG.targets = [
+                                    { region: 1, name: '台北市全區' },
+                                    { region: 3, name: '新北市全區' }
+                                ];
+                                message = '✅ 已切換為【搜尋全台北 + 全新北】';
+                            } else if (args[0] === '台北') {
+                                SEARCH_CONFIG.targets = [
+                                    { region: 1, name: '台北市全區' }
+                                ];
+                                message = '✅ 已切換為【搜尋全台北市】';
+                            } else if (args[0] === '新北') {
+                                SEARCH_CONFIG.targets = [
+                                    { region: 3, name: '新北市全區' }
+                                ];
+                                message = '✅ 已切換為【搜尋全新北市】';
+                            } else {
+                                // 指定特定行政區 (支援多個)
+                                // 先引入 map
+                                const sectionMap = ScraperConfig.sections;
+                                const newTargets = [];
+                                const unknownArgs = [];
+
+                                for (const arg of args) {
+                                    const cleanArg = arg.replace('區', '') + '區'; // 確保有「區」字
+                                    const cleanArgShort = arg.replace('區', ''); // 確保無「區」字 key check
+
+                                    // 嘗試查找 ID (先查全名，再查簡稱)
+                                    let sectionId = sectionMap[cleanArg] || sectionMap[cleanArgShort];
+
+                                    if (sectionId) {
+                                        // 簡單判斷 region: ID <= 20 為台北(1), > 20 為新北(3)
+                                        const regionId = sectionId <= 20 ? 1 : 3;
+                                        const regionName = regionId === 1 ? '台北市' : '新北市';
+                                        newTargets.push({
+                                            region: regionId,
+                                            section: sectionId,
+                                            name: `${regionName}-${cleanArg}`
+                                        });
+                                    } else {
+                                        unknownArgs.push(arg);
+                                    }
+                                }
+
+                                if (newTargets.length > 0) {
+                                    SEARCH_CONFIG.targets = newTargets;
+                                    const names = newTargets.map(t => t.name.split('-')[1]).join('、');
+                                    message = `✅ 已設定監控區域：${names}`;
+                                    if (unknownArgs.length > 0) {
+                                        message += `\n(⚠️ 未知區域：${unknownArgs.join('、')})`;
+                                    }
+                                } else {
+                                    return replyText(event.replyToken, `❌ 找不到區域：${unknownArgs.join(' ')}\n請確認名稱是否正確 (例如：中山、淡水)`);
+                                }
+                            }
+
+                            console.log('更新監控區域:', SEARCH_CONFIG.targets);
+                            return replyText(event.replyToken, message);
                         }
                         // 手動搜尋
                         else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
