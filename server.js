@@ -45,7 +45,7 @@ if (process.env.LINE_USER_ID) {
  * 回覆文字訊息
  */
 async function replyText(replyToken, text) {
-    await client.replyMessage({
+    await lineClient.replyMessage({
         replyToken,
         messages: [{ type: 'text', text }]
     });
