@@ -56,22 +56,38 @@ async function replyText(replyToken, text) {
 
 /**
  * 執行爬蟲任務
+ * @param {boolean} manual - 是否為手動觸發
+ * @param {string|null} triggeredByUserId - 觸發者的 userId (手動時傳入)
  */
-async function runCrawlTask(manual = false) {
+async function runCrawlTask(manual = false, triggeredByUserId = null) {
     if (isCrawling) {
         return { status: 'running', message: '爬蟲正在執行中...' };
     }
 
     isCrawling = true;
-    console.log(`[${new Date().toLocaleString()}] 執行爬蟲任務 (手動: ${manual})`);
+    console.log(`[${new Date().toLocaleString()}] 執行爬蟲任務 (手動: ${manual}, 觸發者: ${triggeredByUserId || '排程'})`);
+
+    // 發送訊息的輔助函數
+    const sendMessage = async (message) => {
+        if (manual && triggeredByUserId) {
+            // 手動觸發：只發給觸發者
+            await lineClient.pushMessage({
+                to: triggeredByUserId,
+                messages: [{ type: 'text', text: message }]
+            });
+        } else {
+            // 排程：廣播給所有人
+            await lineClient.broadcast({
+                messages: [{ type: 'text', text: message }]
+            });
+        }
+    };
 
     try {
         // 定義進度回調函數
         const onProgress = async (message) => {
             try {
-                await lineClient.broadcast({
-                    messages: [{ type: 'text', text: message }]
-                });
+                await sendMessage(message);
             } catch (e) {
                 console.error('發送進度通知失敗:', e);
             }
@@ -93,12 +109,14 @@ async function runCrawlTask(manual = false) {
         const logMessage = logs.length > 0 ? logs.join('\n') + '\n\n' : '';
 
         // 3. 發送通知
+        // 決定發送對象
+        const targetUsers = (manual && triggeredByUserId) ? [triggeredByUserId] : [...subscribedUsers];
+
         if (newListings.length > 0) {
             // 有新物件：發送新物件通知
             const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
 
-            // 發送給所有訂閱用戶
-            for (const userId of subscribedUsers) {
+            for (const userId of targetUsers) {
                 await lineClient.pushMessage({
                     to: userId,
                     messages: [{ type: 'text', text: message }]
@@ -110,9 +128,8 @@ async function runCrawlTask(manual = false) {
             const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
             const message = `📋 目前沒有新物件，但為您列出資料庫中的 ${listings.length} 間物件：\n(監控區域: ${targetNames})`;
 
-            // 發送給所有訂閱用戶
             const listingsToShow = listings.slice(0, 10);
-            for (const userId of subscribedUsers) {
+            for (const userId of targetUsers) {
                 await lineClient.pushMessage({
                     to: userId,
                     messages: [{ type: 'text', text: message }]
@@ -124,7 +141,7 @@ async function runCrawlTask(manual = false) {
             const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
             const message = `📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${targetNames})`;
 
-            for (const userId of subscribedUsers) {
+            for (const userId of targetUsers) {
                 await lineClient.pushMessage({
                     to: userId,
                     messages: [{ type: 'text', text: message }]
@@ -374,7 +391,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                             // 顯示 Loading 動畫
                             await startLoading(event.source.userId, 40);
                             await replyText(event.replyToken, '🔍 正在搜尋中，請稍候...');
-                            runCrawlTask();
+                            runCrawlTask(true, event.source.userId);
                         }
                     }
                     break;
