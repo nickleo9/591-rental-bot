@@ -1,0 +1,23 @@
+{
+    "name": "591-rental-bot",
+    "version": "1.0.0",
+    "description": "591 租屋網自動爬蟲 + LINE Bot 通知系統",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node server.js",
+        "test-scraper": "node test-scraper.js",
+        "test-line": "node test-line.js"
+    },
+    "dependencies": {
+        "@line/bot-sdk": "^9.0.0",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "googleapis": "^130.0.0",
+        "node-cron": "^3.0.3",
+        "playwright": "^1.40.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
