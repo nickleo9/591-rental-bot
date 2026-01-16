@@ -46,7 +46,7 @@ async function startLoading(userId, seconds = 20) {
 }
 
 /**
- * 格式化單一物件訊息 (返回 bubble 陣列以支援圖片輪播)
+ * 格式化單一物件訊息 (返回單一 bubble)
  */
 function formatListing(listing, index) {
     const priceFormatted = listing.price.toLocaleString();
@@ -55,57 +55,40 @@ function formatListing(listing, index) {
         ? listing.title.substring(0, 25) + '...'
         : listing.title;
 
-    const bubbles = [];
-
-    // 處理圖片 URL
+    // 處理圖片 URL (取第一張有效圖片)
     const allImages = listing.images || (listing.image ? [listing.image] : []);
-    const processedImages = allImages
-        .filter(url => url && !url.includes('data:') && url.length > 10)
-        .map(url => {
-            // 轉換 http 為 https
-            if (url.startsWith('http://')) {
-                return url.replace('http://', 'https://');
-            }
-            return url;
-        })
-        .filter(url => url.startsWith('https://') && url.length < 2000);
+    let heroImage = null;
 
-    // 如果有有效圖片，最多取 2 張 (減少以避免超過限制)
-    const imagesToShow = processedImages.slice(0, 2);
+    for (const url of allImages) {
+        if (!url || url.includes('data:') || url.length < 10) continue;
+        let processedUrl = url;
+        if (processedUrl.startsWith('http://')) {
+            processedUrl = processedUrl.replace('http://', 'https://');
+        }
+        if (processedUrl.startsWith('https://') && processedUrl.length < 2000) {
+            heroImage = processedUrl;
+            break;
+        }
+    }
 
-    imagesToShow.forEach((imgUrl, imgIndex) => {
-        bubbles.push({
-            type: 'bubble',
-            size: 'kilo',
+    // 建立 bubble
+    const bubble = {
+        type: 'bubble',
+        size: 'kilo',
+        // 只有有效圖片才顯示 hero
+        ...(heroImage && {
             hero: {
                 type: 'image',
-                url: imgUrl,
+                url: heroImage,
                 size: 'full',
-                aspectRatio: '4:3',
+                aspectRatio: '16:9',
                 aspectMode: 'cover',
                 action: {
                     type: 'uri',
                     uri: listing.url
                 }
-            },
-            footer: {
-                type: 'box',
-                layout: 'vertical',
-                contents: [{
-                    type: 'text',
-                    text: `📷 ${imgIndex + 1}/${imagesToShow.length} - ${shortTitle}`,
-                    size: 'xs',
-                    color: '#888888',
-                    align: 'center'
-                }]
             }
-        });
-    });
-
-    // 主要資訊 bubble
-    const mainBubble = {
-        type: 'bubble',
-        size: 'kilo',
+        }),
         header: {
             type: 'box',
             layout: 'vertical',
@@ -222,9 +205,7 @@ function formatListing(listing, index) {
         }
     };
 
-    bubbles.push(mainBubble);
-
-    return bubbles;
+    return bubble;
 }
 
 /**
@@ -260,8 +241,8 @@ async function sendListingsNotification(userId, listings) {
 
     // 發送每組物件
     for (const chunk of chunks) {
-        // formatListing 現在回傳陣列，需要 flatten
-        const bubbles = chunk.flatMap((listing, index) => formatListing(listing, index));
+        // formatListing 現在回傳單一 bubble
+        const bubbles = chunk.map((listing, index) => formatListing(listing, index));
 
         // LINE carousel 限制最多 12 個 bubbles
         const bubblesToSend = bubbles.slice(0, 12);
