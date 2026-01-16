@@ -6,6 +6,8 @@
     "scripts": {
         "start": "node server.js",
         "dev": "node server.js",
+        "build": "npx playwright install chromium --with-deps",
+        "postinstall": "npx playwright install chromium",
         "test-scraper": "node test-scraper.js",
         "test-line": "node test-line.js"
     },
