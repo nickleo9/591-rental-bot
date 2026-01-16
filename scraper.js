@@ -314,14 +314,25 @@ async function scrape591(options = {}) {
 
     const page = await context.newPage();
     let allListings = [];
+    const executionLogs = [];
 
     try {
-        // 爬取每個目標區域
+        // 遍歷每個目標區域
         for (const target of targets) {
+            // 建構搜尋網址僅供 Log 使用 (實際爬取由 scrapeRegion 內部呼叫 buildSearchUrl)
+            const logUrl = buildSearchUrl(target.region, target.section, minRent, maxRent, '乾濕分離');
             console.log(`\n🏙️ 正在爬取: ${target.name}`);
+            console.log(`📍 URL: ${logUrl}`);
+
+            // 記錄 Log
+            let logEntry = `🏙️ 正在爬取: ${target.name}\n📍 <${logUrl}|連結>`;
 
             const listings = await scrapeRegion(page, target.region, target.section, minRent, maxRent);
             console.log(`   找到 ${listings.length} 間物件`);
+
+            // 新增結果 Log
+            logEntry += `\n   找到 ${listings.length} 間物件`;
+            executionLogs.push(logEntry);
 
             // 為每個物件添加地區標記
             listings.forEach(l => {
@@ -329,6 +340,9 @@ async function scrape591(options = {}) {
             });
 
             allListings = allListings.concat(listings);
+
+            // 避免過快請求
+            await new Promise(r => setTimeout(r, 2000));
         }
 
         // 去除重複 (如果有的話)
