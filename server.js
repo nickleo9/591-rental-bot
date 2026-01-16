@@ -43,41 +43,7 @@ async function replyText(replyToken, text) {
 }
 
 /**
- * 主要爬蟲任務
- */
-async function runCrawlTask() {
-    console.log('\n========================================');
  * 執行爬蟲任務
-        */
-    async function runCrawlTask(manual = false) {
-        if (isCrawling) {
-            return { status: 'running', message: '爬蟲正在執行中...' };
-        }
-
-        isCrawling = true;
-        console.log(`[${new Date().toLocaleString()}] 執行爬蟲任務 (手動: ${manual})`);
-
-        try {
-            // 1. 執行爬蟲
-            const listings = await scrape591({
-                targets: SEARCH_CONFIG.targets,
-                minRent: SEARCH_CONFIG.minRent,
-                maxRent: SEARCH_CONFIG.maxRent,
-                maxResults: 20
-            });
-
-            // 2. 儲存到 Google Sheets
-            const { saved, new: newListings } = await saveListings(listings);
-
-            // 3. 發送通知 (強制通知，即使沒有新物件)
-            if (newListings.length > 0) {
-                const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
-                await broadcast(message);
-                await sendFlexMessage(newListings);
-            } else {
-                // 沒有新物件也要發送通知
-                const message = `📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${SEARCH_CONFIG.targets.map(t => t.name).join('/')})`; // Updated to use targets
-                await broadcast(message);
             }
 
             isCrawling = false;
@@ -168,15 +134,14 @@ async function runCrawlTask() {
    (連結: https://docs.google.com/spreadsheets/d/14-Mm8kSIHevPCJwI6I8wyWHnc9_gtyu3tqCRvoGtxH0/edit#gid=0)
 
 🔎【目前篩選條件】
-• 地區: 中山區、大同區、永和區 (預設)
+• 地區: 中正區、中山區、大同區、永和區 (預設)
 • 租金: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent} (可自訂)
 • 固定條件: 近捷運、可開伙、乾濕分離
 • 排序: 取最新的 20 筆資料
 
 🔔【通知機制】
 • 有新物件: 傳送圖文卡片
-• 無新物件: 發送「今日無新物件」通知
-• 每日排程: 早上 11:00 自動檢查
+• 無新物件: 發送「今日無新物件」通知\n(監控: 中正/中山/大同/永和)
 
 🔍【新舊判斷】
 • 依據「591物件ID」判斷

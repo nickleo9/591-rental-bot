@@ -44,6 +44,7 @@ const SEARCH_CONFIG = {
     },
     // 行政區代碼 (Section IDs)
     sections: {
+        zhongzheng: 1, // 中正區
         zhongshan: 3,  // 中山區
         datong: 2,     // 大同區
         yonghe: 37     // 永和區
@@ -178,6 +179,7 @@ async function scrape591(options = {}) {
     const {
         // 預設目標區域 (包含 region ID 和 section ID)
         targets = [
+            { region: 1, section: 1, name: '台北市-中正區' },
             { region: 1, section: 3, name: '台北市-中山區' },
             { region: 1, section: 2, name: '台北市-大同區' },
             { region: 3, section: 37, name: '新北市-永和區' }
