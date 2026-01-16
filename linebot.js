@@ -46,7 +46,7 @@ async function startLoading(userId, seconds = 20) {
 }
 
 /**
- * 格式化單一物件訊息
+ * 格式化單一物件訊息 (返回 bubble 陣列以支援圖片輪播)
  */
 function formatListing(listing, index) {
     const priceFormatted = listing.price.toLocaleString();
@@ -55,23 +55,45 @@ function formatListing(listing, index) {
         ? listing.title.substring(0, 25) + '...'
         : listing.title;
 
-    const bubble = {
-        type: 'bubble',
-        size: 'kilo',
-        // 如果有圖片，加入 hero 區塊
-        ...(listing.image && {
+    const bubbles = [];
+
+    // 如果有多張圖片，先建立圖片輪播 bubbles (最多 3 張)
+    const images = listing.images || (listing.image ? [listing.image] : []);
+    const imagesToShow = images.slice(0, 3); // 限制最多 3 張
+
+    imagesToShow.forEach((imgUrl, imgIndex) => {
+        bubbles.push({
+            type: 'bubble',
+            size: 'kilo',
             hero: {
                 type: 'image',
-                url: listing.image,
+                url: imgUrl,
                 size: 'full',
-                aspectRatio: '16:9',
+                aspectRatio: '4:3',
                 aspectMode: 'cover',
                 action: {
                     type: 'uri',
                     uri: listing.url
                 }
+            },
+            footer: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [{
+                    type: 'text',
+                    text: `📷 ${imgIndex + 1}/${imagesToShow.length} - ${shortTitle}`,
+                    size: 'xs',
+                    color: '#888888',
+                    align: 'center'
+                }]
             }
-        }),
+        });
+    });
+
+    // 主要資訊 bubble
+    const mainBubble = {
+        type: 'bubble',
+        size: 'kilo',
         header: {
             type: 'box',
             layout: 'vertical',
@@ -188,7 +210,9 @@ function formatListing(listing, index) {
         }
     };
 
-    return bubble;
+    bubbles.push(mainBubble);
+
+    return bubbles;
 }
 
 /**
@@ -224,7 +248,11 @@ async function sendListingsNotification(userId, listings) {
 
     // 發送每組物件
     for (const chunk of chunks) {
-        const bubbles = chunk.map((listing, index) => formatListing(listing, index));
+        // formatListing 現在回傳陣列，需要 flatten
+        const bubbles = chunk.flatMap((listing, index) => formatListing(listing, index));
+
+        // LINE carousel 限制最多 12 個 bubbles
+        const bubblesToSend = bubbles.slice(0, 12);
 
         await client.pushMessage({
             to: userId,
@@ -233,7 +261,7 @@ async function sendListingsNotification(userId, listings) {
                 altText: `找到 ${chunk.length} 間房屋`,
                 contents: {
                     type: 'carousel',
-                    contents: bubbles
+                    contents: bubblesToSend
                 }
             }]
         });
