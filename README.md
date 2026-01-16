@@ -118,3 +118,39 @@ npm start
 ## 📄 授權
 
 MIT License
+
+---
+
+## 📝 開發日誌
+
+### 2026-01-16 更新
+
+#### ✅ 已完成
+1. **UptimeRobot Keep-Alive 監控**
+   - 已設定每 5 分鐘 ping `/health` 端點
+   - 監控名稱：`591-rental-bot`
+   - 防止 Render 免費方案休眠
+
+2. **LINE Loading 動畫功能**
+   - 加入 `showLoadingAnimation()` 函數
+   - 當用戶輸入「搜尋」或「找房」時顯示 40 秒 Loading 動畫
+   - 使用 LINE Messaging API 的 chatLoading 功能
+
+#### 🔧 待解決問題
+- **LINE API 401 錯誤**：Render 上的 `LINE_CHANNEL_ACCESS_TOKEN` 可能被截斷
+  - 本地 `.env` Token 長度：172 字元
+  - Render 環境變數需要重新設定完整 Token
+  - 錯誤訊息：`Authentication failed. Confirm that the access token in the authorization header is valid.`
+
+#### 🔑 環境變數檢查清單
+| 變數名稱 | 預期長度 | 狀態 |
+|---------|---------|------|
+| LINE_CHANNEL_SECRET | 32 字元 | ✅ |
+| LINE_CHANNEL_ACCESS_TOKEN | ~172 字元 | ⚠️ 需確認 |
+| LINE_USER_ID | ~33 字元 | ✅ |
+| GOOGLE_SHEETS_ID | ~44 字元 | ✅ |
+
+#### 📋 下一步
+1. 重新在 Render 設定完整的 `LINE_CHANNEL_ACCESS_TOKEN`
+2. 確認部署成功後測試 Loading 動畫
+3. 確認 LINE Bot 正常接收和回覆訊息
