@@ -41,6 +41,9 @@ if (process.env.LINE_USER_ID) {
     subscribedUsers.add(process.env.LINE_USER_ID);
 }
 
+// 爬蟲狀態鎖
+let isCrawling = false;
+
 /**
  * 回覆文字訊息
  */
@@ -213,7 +216,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 `📊 目前設定：
 
 💰 租金範圍：${SEARCH_CONFIG.minRent.toLocaleString()} - ${SEARCH_CONFIG.maxRent.toLocaleString()} 元
-🏙️ 搜尋地區：${regions}
+🏙️ 搜尋地區：${targetAreas}
 ⏰ 每日通知：11:00
 
 輸入「指令」查看更多操作`);
