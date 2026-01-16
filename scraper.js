@@ -179,9 +179,15 @@ async function scrapeRegion(page, region, section, minRent, maxRent) {
                         tags.push(tag.textContent?.trim());
                     });
 
-                    // 圖片
-                    const imgEl = item.querySelector('img');
-                    const image = imgEl?.src || '';
+                    // 圖片 (抓取多張)
+                    const images = [];
+                    item.querySelectorAll('img').forEach(img => {
+                        const src = img.src;
+                        if (src && !src.includes('placeholder') && !images.includes(src)) {
+                            images.push(src);
+                        }
+                    });
+                    const image = images[0] || ''; // 保留單張圖片相容性
 
                     if (title && price > 0) {
                         results.push({
@@ -193,6 +199,7 @@ async function scrapeRegion(page, region, section, minRent, maxRent) {
                             tags,
                             subway,
                             image,
+                            images, // 新增多張圖片陣列
                             url: `https://rent.591.com.tw/${id}`
                         });
                     }
