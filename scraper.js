@@ -350,15 +350,19 @@ async function scrape591(options = {}) {
             allListings = allListings.slice(0, maxResults);
         }
 
+        // ... existing code ...
         console.log(`\n✅ 總共找到 ${allListings.length} 間符合條件的物件`);
+
+        executionLogs.push(`✅ 總共找到 ${allListings.length} 間符合條件的物件`);
 
     } catch (error) {
         console.error('❌ 爬蟲錯誤:', error);
+        executionLogs.push(`❌ 爬蟲錯誤: ${error.message}`);
     } finally {
         await browser.close();
     }
 
-    return allListings;
+    return { listings: allListings, logs: executionLogs };
 }
 
 module.exports = {
