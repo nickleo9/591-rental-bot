@@ -81,15 +81,20 @@ async function runCrawlTask(manual = false) {
         const logMessage = logs.length > 0 ? logs.join('\n') + '\n\n' : '';
 
         // 3. 發送通知 (強制通知，即使沒有新物件)
+        // 3. 發送通知 (強制通知，即使沒有新物件)
         if (newListings.length > 0) {
             const message = `${logMessage}🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
-            await lineClient.broadcast(message);
+            await lineClient.broadcast({
+                messages: [{ type: 'text', text: message }]
+            });
             await lineClient.sendFlexMessage(newListings);
         } else {
             // 沒有新物件也要發送通知
             const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
             const message = `${logMessage}📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${targetNames})`;
-            await lineClient.broadcast(message);
+            await lineClient.broadcast({
+                messages: [{ type: 'text', text: message }]
+            });
         }
 
         isCrawling = false;
@@ -105,7 +110,9 @@ async function runCrawlTask(manual = false) {
 
         // 發生錯誤時通知管理員
         try {
-            await lineClient.broadcast(`⚠️ 爬蟲發生錯誤: ${error.message}`);
+            await lineClient.broadcast({
+                messages: [{ type: 'text', text: `⚠️ 爬蟲發生錯誤: ${error.message}` }]
+            });
         } catch (e) {
             console.error('發送錯誤通知失敗:', e);
         }
