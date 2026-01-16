@@ -4,6 +4,35 @@
  */
 
 const { chromium } = require('playwright');
+const { execSync } = require('child_process');
+
+// 確保 Playwright 瀏覽器已安裝
+async function ensureBrowserInstalled() {
+    try {
+        // 嘗試取得瀏覽器路徑
+        const browserPath = chromium.executablePath();
+        const fs = require('fs');
+        if (fs.existsSync(browserPath)) {
+            console.log('✅ Chromium 瀏覽器已就緒');
+            return true;
+        }
+    } catch (e) {
+        // 瀏覽器不存在
+    }
+
+    console.log('📦 正在安裝 Chromium 瀏覽器...');
+    try {
+        execSync('npx playwright install chromium', {
+            stdio: 'inherit',
+            timeout: 300000 // 5 分鐘超時
+        });
+        console.log('✅ Chromium 安裝完成');
+        return true;
+    } catch (error) {
+        console.error('❌ Chromium 安裝失敗:', error.message);
+        return false;
+    }
+}
 
 // 搜尋設定
 const SEARCH_CONFIG = {
@@ -205,6 +234,9 @@ async function scrape591(options = {}) {
 
     console.log('🚀 開始爬取 591 租屋網...');
     console.log(`📊 條件: 租金 ${minRent}-${maxRent} 元, 地區: ${regions.join(', ')}`);
+
+    // 確保瀏覽器已安裝
+    await ensureBrowserInstalled();
 
     const browser = await chromium.launch({
         headless: true,
