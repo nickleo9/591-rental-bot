@@ -107,6 +107,11 @@ app.get('/', (req, res) => {
     });
 });
 
+// Keep-Alive 端點（給 UptimeRobot 等服務使用）
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
+
 // 手動觸發爬蟲
 app.get('/crawl', async (req, res) => {
     res.json({ message: '爬蟲任務已啟動' });
