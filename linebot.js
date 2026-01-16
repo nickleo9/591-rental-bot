@@ -49,17 +49,35 @@ async function startLoading(userId, seconds = 20) {
  */
 function formatListing(listing, index) {
     const priceFormatted = listing.price.toLocaleString();
+    // 截短標題 (避免過長)
+    const shortTitle = listing.title.length > 25
+        ? listing.title.substring(0, 25) + '...'
+        : listing.title;
 
-    return {
+    const bubble = {
         type: 'bubble',
         size: 'kilo',
+        // 如果有圖片，加入 hero 區塊
+        ...(listing.image && {
+            hero: {
+                type: 'image',
+                url: listing.image,
+                size: 'full',
+                aspectRatio: '16:9',
+                aspectMode: 'cover',
+                action: {
+                    type: 'uri',
+                    uri: listing.url
+                }
+            }
+        }),
         header: {
             type: 'box',
             layout: 'vertical',
             contents: [
                 {
                     type: 'text',
-                    text: `${index + 1}. ${listing.title}`,
+                    text: `${index + 1}. ${shortTitle}`,
                     weight: 'bold',
                     size: 'md',
                     wrap: true,
@@ -168,6 +186,8 @@ function formatListing(listing, index) {
             ]
         }
     };
+
+    return bubble;
 }
 
 /**
