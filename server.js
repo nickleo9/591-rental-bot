@@ -44,89 +44,123 @@ async function replyText(replyToken, text) {
 
 /**
  * 執行爬蟲任務
-            }
+ */
+async function runCrawlTask(manual = false) {
+    if (isCrawling) {
+        return { status: 'running', message: '爬蟲正在執行中...' };
+    }
 
-            isCrawling = false;
-            return {
-                status: 'success',
-                count: listings.length,
-                newCount: newListings.length
-            };
+    isCrawling = true;
+    console.log(`[${new Date().toLocaleString()}] 執行爬蟲任務 (手動: ${manual})`);
 
-        } catch (error) {
-            console.error('爬蟲任務失敗:', error);
-            isCrawling = false;
+    try {
+        // 1. 執行爬蟲
+        const listings = await scrape591({
+            targets: SEARCH_CONFIG.targets,
+            minRent: SEARCH_CONFIG.minRent,
+            maxRent: SEARCH_CONFIG.maxRent,
+            maxResults: 20
+        });
 
-            // 發生錯誤時通知管理員
-            try {
-                await broadcast(`⚠️ 爬蟲發生錯誤: ${error.message}`);
-            } catch (e) {
-                console.error('發送錯誤通知失敗:', e);
-            }
+        // 2. 儲存到 Google Sheets
+        const { saved, new: newListings } = await saveListings(listings);
 
-            return { status: 'error', error: error.message };
+        // 3. 發送通知 (強制通知，即使沒有新物件)
+        if (newListings.length > 0) {
+            const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
+            await lineBot.broadcast(message);
+            await lineBot.sendFlexMessage(newListings);
+        } else {
+            // 沒有新物件也要發送通知
+            const message = `📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: 中正/中山/大同/永和)`;
+            await lineBot.broadcast(message);
+        }
+
+        isCrawling = false;
+        return {
+            status: 'success',
+            count: listings.length,
+            newCount: newListings.length
+        };
+
+    } catch (error) {
+        console.error('爬蟲任務失敗:', error);
+        isCrawling = false;
+
+        // 發生錯誤時通知管理員
+        try {
+            await lineBot.broadcast(`⚠️ 爬蟲發生錯誤: ${error.message}`);
+        } catch (e) {
+            console.error('發送錯誤通知失敗:', e);
+        }
+
+        return { status: 'error', error: error.message };
+    }
+}
+
+return { status: 'error', error: error.message };
         }
     }
 
-    // ============================================
-    // Express 路由
-    // ============================================
+// ============================================
+// Express 路由
+// ============================================
 
-    // 健康檢查
-    app.get('/', (req, res) => {
-        res.json({
-            status: 'ok',
-            name: '591 租屋爬蟲系統',
-            subscribedUsers: subscribedUsers.size,
-            config: SEARCH_CONFIG,
-            nextRun: process.env.CRON_SCHEDULE || '0 11 * * *'
-        });
+// 健康檢查
+app.get('/', (req, res) => {
+    res.json({
+        status: 'ok',
+        name: '591 租屋爬蟲系統',
+        subscribedUsers: subscribedUsers.size,
+        config: SEARCH_CONFIG,
+        nextRun: process.env.CRON_SCHEDULE || '0 11 * * *'
     });
+});
 
-    // Keep-Alive 端點（給 UptimeRobot 等服務使用）
-    app.get('/health', (req, res) => {
-        res.status(200).send('OK');
-    });
+// Keep-Alive 端點（給 UptimeRobot 等服務使用）
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
-    // 手動觸發爬蟲
-    app.get('/crawl', async (req, res) => {
-        res.json({ message: '爬蟲任務已啟動' });
-        runCrawlTask(true);
-    });
+// 手動觸發爬蟲
+app.get('/crawl', async (req, res) => {
+    res.json({ message: '爬蟲任務已啟動' });
+    runCrawlTask(true);
+});
 
-    // LINE Webhook
-    app.post('/webhook', express.json(), async (req, res) => {
-        try {
-            const events = req.body.events || [];
+// LINE Webhook
+app.post('/webhook', express.json(), async (req, res) => {
+    try {
+        const events = req.body.events || [];
 
-            for (const event of events) {
-                console.log('📩 收到 LINE 事件:', event.type);
+        for (const event of events) {
+            console.log('📩 收到 LINE 事件:', event.type);
 
-                // 記錄使用者 ID
-                if (event.source && event.source.userId) {
-                    const userId = event.source.userId;
-                    if (!subscribedUsers.has(userId)) {
-                        subscribedUsers.add(userId);
-                        console.log(`👤 新增訂閱用戶: ${userId}`);
+            // 記錄使用者 ID
+            if (event.source && event.source.userId) {
+                const userId = event.source.userId;
+                if (!subscribedUsers.has(userId)) {
+                    subscribedUsers.add(userId);
+                    console.log(`👤 新增訂閱用戶: ${userId}`);
 
-                        // 更新 .env 提醒
-                        console.log(`\n⚠️ 請將以下 ID 加入 .env 的 LINE_USER_ID:`);
-                        console.log(`   LINE_USER_ID=${userId}\n`);
-                    }
+                    // 更新 .env 提醒
+                    console.log(`\n⚠️ 請將以下 ID 加入 .env 的 LINE_USER_ID:`);
+                    console.log(`   LINE_USER_ID=${userId}\n`);
                 }
+            }
 
-                // 處理不同類型的事件
-                switch (event.type) {
-                    case 'message':
-                        // 收到文字訊息
-                        if (event.message.type === 'text') {
-                            const text = event.message.text.trim();
-                            const lowerText = text.toLowerCase();
+            // 處理不同類型的事件
+            switch (event.type) {
+                case 'message':
+                    // 收到文字訊息
+                    if (event.message.type === 'text') {
+                        const text = event.message.text.trim();
+                        const lowerText = text.toLowerCase();
 
-                            // 指令列表
-                            if (lowerText === '指令' || lowerText === '說明' || lowerText === 'help' || lowerText === '/h') {
-                                await replyText(event.replyToken,
-                                    `🤖 591 租屋小幫手 - 完整使用說明
+                        // 指令列表
+                        if (lowerText === '指令' || lowerText === '說明' || lowerText === 'help' || lowerText === '/h') {
+                            await replyText(event.replyToken,
+                                `🤖 591 租屋小幫手 - 完整使用說明
 
 📌【資料來源與去向】
 • 來源: 591 租屋網 (台北/新北)
@@ -160,136 +194,136 @@ async function replyText(replyToken, text) {
 
 👨‍💻 開發者: Nick
 🔧 系統狀態: 託管於 Render (自動除錯紀錄)`);
-                            }
-                            // 查看狀態
-                            else if (lowerText === '狀態' || lowerText === 'status') {
-                                const targetAreas = SEARCH_CONFIG.targets.map(t => t.name).join('、');
-                                await replyText(event.replyToken,
-                                    `📊 目前設定：
+                        }
+                        // 查看狀態
+                        else if (lowerText === '狀態' || lowerText === 'status') {
+                            const targetAreas = SEARCH_CONFIG.targets.map(t => t.name).join('、');
+                            await replyText(event.replyToken,
+                                `📊 目前設定：
 
 💰 租金範圍：${SEARCH_CONFIG.minRent.toLocaleString()} - ${SEARCH_CONFIG.maxRent.toLocaleString()} 元
 🏙️ 搜尋地區：${regions}
 ⏰ 每日通知：11:00
 
 輸入「指令」查看更多操作`);
-                            }
-                            // 調整租金
-                            else if (text.startsWith('租金')) {
-                                const match = text.match(/(\d+)[^\d]+(\d+)/);
-                                if (match) {
-                                    const min = parseInt(match[1]);
-                                    const max = parseInt(match[2]);
-                                    if (min < max && min >= 1000 && max <= 100000) {
-                                        SEARCH_CONFIG.minRent = min;
-                                        SEARCH_CONFIG.maxRent = max;
-                                        await replyText(event.replyToken,
-                                            `✅ 租金範圍已更新！
+                        }
+                        // 調整租金
+                        else if (text.startsWith('租金')) {
+                            const match = text.match(/(\d+)[^\d]+(\d+)/);
+                            if (match) {
+                                const min = parseInt(match[1]);
+                                const max = parseInt(match[2]);
+                                if (min < max && min >= 1000 && max <= 100000) {
+                                    SEARCH_CONFIG.minRent = min;
+                                    SEARCH_CONFIG.maxRent = max;
+                                    await replyText(event.replyToken,
+                                        `✅ 租金範圍已更新！
 
 💰 新範圍：${min.toLocaleString()} - ${max.toLocaleString()} 元/月
 
 輸入「搜尋」立即查找`);
-                                    } else {
-                                        await replyText(event.replyToken, '❌ 請輸入有效的租金範圍（1,000 - 100,000）\n範例：租金 8000-15000');
-                                    }
                                 } else {
-                                    await replyText(event.replyToken, '❌ 格式錯誤\n範例：租金 8000-15000');
+                                    await replyText(event.replyToken, '❌ 請輸入有效的租金範圍（1,000 - 100,000）\n範例：租金 8000-15000');
                                 }
-                            }
-                            // 調整地區
-                            else if (text.startsWith('地區')) {
-                                const area = text.replace('地區', '').trim();
-                                if (area.includes('台北') && !area.includes('新北')) {
-                                    SEARCH_CONFIG.regions = [1];
-                                    await replyText(event.replyToken, '✅ 已設定只搜尋台北市');
-                                } else if (area.includes('新北') && !area.includes('台北')) {
-                                    SEARCH_CONFIG.regions = [3];
-                                    await replyText(event.replyToken, '✅ 已設定只搜尋新北市');
-                                } else if (area.includes('全') || (area.includes('台北') && area.includes('新北'))) {
-                                    SEARCH_CONFIG.regions = [1, 3];
-                                    await replyText(event.replyToken, '✅ 已設定搜尋台北市 + 新北市');
-                                } else {
-                                    await replyText(event.replyToken, '❌ 請輸入：地區 台北 / 地區 新北 / 地區 全部');
-                                }
-                            }
-                            // 手動搜尋
-                            else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
-                                // 顯示 Loading 動畫
-                                await startLoading(event.source.userId, 40);
-                                await replyText(event.replyToken, '🔍 正在搜尋中，請稍候...');
-                                runCrawlTask();
+                            } else {
+                                await replyText(event.replyToken, '❌ 格式錯誤\n範例：租金 8000-15000');
                             }
                         }
-                        break;
-
-                    case 'postback':
-                        // 使用者點擊按鈕
-                        const result = await handlePostback(event);
-
-                        if (result && result.action === 'interested') {
-                            // 標記為有興趣
-                            await markAsInterested(result.id, result.title, result.price);
+                        // 調整地區
+                        else if (text.startsWith('地區')) {
+                            const area = text.replace('地區', '').trim();
+                            if (area.includes('台北') && !area.includes('新北')) {
+                                SEARCH_CONFIG.regions = [1];
+                                await replyText(event.replyToken, '✅ 已設定只搜尋台北市');
+                            } else if (area.includes('新北') && !area.includes('台北')) {
+                                SEARCH_CONFIG.regions = [3];
+                                await replyText(event.replyToken, '✅ 已設定只搜尋新北市');
+                            } else if (area.includes('全') || (area.includes('台北') && area.includes('新北'))) {
+                                SEARCH_CONFIG.regions = [1, 3];
+                                await replyText(event.replyToken, '✅ 已設定搜尋台北市 + 新北市');
+                            } else {
+                                await replyText(event.replyToken, '❌ 請輸入：地區 台北 / 地區 新北 / 地區 全部');
+                            }
                         }
-                        break;
+                        // 手動搜尋
+                        else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
+                            // 顯示 Loading 動畫
+                            await startLoading(event.source.userId, 40);
+                            await replyText(event.replyToken, '🔍 正在搜尋中，請稍候...');
+                            runCrawlTask();
+                        }
+                    }
+                    break;
 
-                    case 'follow':
-                        // 用戶加入好友
-                        console.log('🎉 新用戶加入:', event.source.userId);
-                        break;
-                }
+                case 'postback':
+                    // 使用者點擊按鈕
+                    const result = await handlePostback(event);
+
+                    if (result && result.action === 'interested') {
+                        // 標記為有興趣
+                        await markAsInterested(result.id, result.title, result.price);
+                    }
+                    break;
+
+                case 'follow':
+                    // 用戶加入好友
+                    console.log('🎉 新用戶加入:', event.source.userId);
+                    break;
             }
-
-            res.status(200).send('OK');
-        } catch (error) {
-            console.error('Webhook 錯誤:', error);
-            res.status(500).send('Error');
         }
-    });
 
-    // ============================================
-    // 排程設定
-    // ============================================
-
-    // 每天 11:00 執行（台灣時間）
-    const cronSchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
-    console.log(`⏰ 排程設定: ${cronSchedule}`);
-
-    cron.schedule(cronSchedule, () => {
-        console.log('⏰ 定時任務觸發');
-        runCrawlTask();
-    }, {
-        timezone: 'Asia/Taipei'
-    });
-
-    // ============================================
-    // 啟動伺服器
-    // ============================================
-
-    async function start() {
-        try {
-            // 初始化 Google Sheets
-            await initSheets();
-
-            // 啟動伺服器
-            app.listen(PORT, () => {
-                console.log('\n========================================');
-                console.log('🏠 591 租屋爬蟲系統已啟動！');
-                console.log('========================================');
-                console.log(`📡 伺服器: http://localhost:${PORT}`);
-                console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);
-                console.log(`📡 手動爬取: http://localhost:${PORT}/crawl`);
-                console.log(`⏰ 定時排程: ${cronSchedule}`);
-                console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.regions.map(r => r === 1 ? '台北市' : '新北市').join(', ')}`);
-                console.log(`💰 租金範圍: ${SEARCH_CONFIG.minRent} - ${SEARCH_CONFIG.maxRent} 元`);
-                console.log('========================================\n');
-
-                if (subscribedUsers.size === 0) {
-                    console.log('⚠️ 提示: 請先用 LINE 發送訊息給 Bot 以取得你的 User ID');
-                    console.log('   然後將 User ID 加入 .env 的 LINE_USER_ID\n');
-                }
-            });
-        } catch (error) {
-            console.error('❌ 啟動失敗:', error);
-        }
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('Webhook 錯誤:', error);
+        res.status(500).send('Error');
     }
+});
 
-    start();
+// ============================================
+// 排程設定
+// ============================================
+
+// 每天 11:00 執行（台灣時間）
+const cronSchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
+console.log(`⏰ 排程設定: ${cronSchedule}`);
+
+cron.schedule(cronSchedule, () => {
+    console.log('⏰ 定時任務觸發');
+    runCrawlTask();
+}, {
+    timezone: 'Asia/Taipei'
+});
+
+// ============================================
+// 啟動伺服器
+// ============================================
+
+async function start() {
+    try {
+        // 初始化 Google Sheets
+        await initSheets();
+
+        // 啟動伺服器
+        app.listen(PORT, () => {
+            console.log('\n========================================');
+            console.log('🏠 591 租屋爬蟲系統已啟動！');
+            console.log('========================================');
+            console.log(`📡 伺服器: http://localhost:${PORT}`);
+            console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);
+            console.log(`📡 手動爬取: http://localhost:${PORT}/crawl`);
+            console.log(`⏰ 定時排程: ${cronSchedule}`);
+            console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.regions.map(r => r === 1 ? '台北市' : '新北市').join(', ')}`);
+            console.log(`💰 租金範圍: ${SEARCH_CONFIG.minRent} - ${SEARCH_CONFIG.maxRent} 元`);
+            console.log('========================================\n');
+
+            if (subscribedUsers.size === 0) {
+                console.log('⚠️ 提示: 請先用 LINE 發送訊息給 Bot 以取得你的 User ID');
+                console.log('   然後將 User ID 加入 .env 的 LINE_USER_ID\n');
+            }
+        });
+    } catch (error) {
+        console.error('❌ 啟動失敗:', error);
+    }
+}
+
+start();
