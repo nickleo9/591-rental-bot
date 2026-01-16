@@ -387,7 +387,7 @@ async function start() {
             console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);
             console.log(`📡 手動爬取: http://localhost:${PORT}/crawl`);
             console.log(`⏰ 定時排程: ${cronSchedule}`);
-            console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.regions.map(r => r === 1 ? '台北市' : '新北市').join(', ')}`);
+            console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.targets.map(t => t.name).join('、')}`);
             console.log(`💰 租金範圍: ${SEARCH_CONFIG.minRent} - ${SEARCH_CONFIG.maxRent} 元`);
             console.log('========================================\n');
 
