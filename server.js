@@ -66,12 +66,24 @@ async function runCrawlTask(manual = false) {
     console.log(`[${new Date().toLocaleString()}] 執行爬蟲任務 (手動: ${manual})`);
 
     try {
+        // 定義進度回調函數
+        const onProgress = async (message) => {
+            try {
+                await lineClient.broadcast({
+                    messages: [{ type: 'text', text: message }]
+                });
+            } catch (e) {
+                console.error('發送進度通知失敗:', e);
+            }
+        };
+
         // 1. 執行爬蟲
         const { listings, logs } = await scrape591({
             targets: SEARCH_CONFIG.targets,
             minRent: SEARCH_CONFIG.minRent,
             maxRent: SEARCH_CONFIG.maxRent,
-            maxResults: 20
+            maxResults: 20,
+            onProgress // 傳入回調
         });
 
         // 2. 儲存到 Google Sheets

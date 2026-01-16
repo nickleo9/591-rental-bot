@@ -283,7 +283,6 @@ async function getListingDetails(page, url) {
  */
 async function scrape591(options = {}) {
     const {
-        // 預設目標區域 (包含 region ID 和 section ID)
         targets = [
             { region: 1, section: 1, name: '台北市-中正區' },
             { region: 1, section: 3, name: '台北市-中山區' },
@@ -292,10 +291,21 @@ async function scrape591(options = {}) {
         ],
         minRent = 8000,
         maxRent = 12000,
-        maxResults = 20
+        maxResults = 20,
+        onProgress = null // 新增回調函數
     } = options;
 
     console.log('🚀 開始爬取 591 租屋網...');
+    if (onProgress) onProgress('🚀 爬蟲啟動中...');
+
+    // ... (intermediate code preserved, skipping to loop) ...
+    // Note: I cannot skip lines in replace_file_content easily without context matching. 
+    // I will target the function start and the loop separately if needed.
+    // Actually, I'll rewrite the start and then the loop.
+
+    // ... 
+    // Let's do the start first.
+
     console.log(`📊 條件: 租金 ${minRent}-${maxRent} 元`);
     console.log(`📍 目標區域: ${targets.map(t => t.name).join(', ')}`);
 
