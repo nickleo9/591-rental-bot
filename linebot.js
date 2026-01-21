@@ -573,9 +573,11 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
         }
     }));
 
+    const gasUrl = `https://script.google.com/macros/s/AKfycbxU7rZrSagLxBBPHBIu_r7ac_AelcX7l9u6-FF2T7xewbIlKwsh7A5_HouoVPBC72ms/exec?userId=${userId}`;
+
     const summaryMessage = {
         type: 'text',
-        text: `⭐ 你的收藏清單 (${favorites.length} 間)\n\n以下是你標記「有興趣」的物件：`
+        text: `⭐ 你的收藏清單 (${favorites.length} 間)\n\n以下是你標記「有興趣」的物件：\n\n📱 查看完整清單網頁版：\n${gasUrl}`
     };
 
     const carouselMessage = {

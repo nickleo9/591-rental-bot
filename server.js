@@ -393,6 +393,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 • 來源: 591 租屋網 (台北/新北)
 • 儲存: 自動整理至系統資料庫
 • 查詢: 輸入「收藏」看你的待看清單
+• 所有物件: https://script.google.com/macros/s/AKfycbxU7rZrSagLxBBPHBIu_r7ac_AelcX7l9u6-FF2T7xewbIlKwsh7A5_HouoVPBC72ms/exec?view=all
 
 🔎【目前篩選條件】
 • 地區: 中正區、中山區、大同區、永和區 (預設)
