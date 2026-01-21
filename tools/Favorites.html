@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的收藏 - 591 租屋小幫手</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: rgba(30, 41, 59, 0.8);
+            --accent: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(148, 163, 184, 0.1);
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --shadow-glow: rgba(59, 130, 246, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1a2e 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px 16px 80px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .house-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+        }
+
+        .house-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 40px var(--shadow-glow);
+        }
+
+        .card-img {
+            height: 120px;
+            background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: rgba(255, 255, 255, 0.8);
+            position: relative;
+        }
+
+        .btn-remove {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            border: none;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .btn-remove:hover {
+            background: #ef4444;
+            transform: scale(1.1);
+        }
+
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            backdrop-filter: blur(4px);
+            background: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 1rem;
+            line-height: 1.4;
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            min-height: 2.8em;
+        }
+
+        .card-address {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .card-address i {
+            color: #ef4444;
+        }
+
+        .card-landlord {
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            margin-bottom: 12px;
+        }
+
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .price {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ef4444, #f97316);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn-view {
+            background: linear-gradient(135deg, #ef4444, #f97316);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .btn-view:hover {
+            opacity: 0.9;
+            color: white;
+        }
+
+        .loading,
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border-color);
+            border-top-color: #ef4444;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px 20px;
+            border-radius: 12px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .toast.show {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        .toast.success {
+            border-left: 3px solid #22c55e;
+        }
+
+        .toast.error {
+            border-left: 3px solid #ef4444;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1><i class="bi bi-heart-fill"></i> 我的收藏</h1>
+        <p id="subtitle">您標記有興趣的物件</p>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>正在載入收藏...</p>
+    </div>
+
+    <div id="card-container" class="card-grid"></div>
+
+    <div class="toast-container">
+        <div id="toast" class="toast"><i class="bi bi-check-circle-fill"></i><span id="toast-msg"></span></div>
+    </div>
+
+    <script>
+        const USER_ID = <?= JSON.stringify(userId) ?>;
+
+        window.onload = function () {
+            if (!USER_ID) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('card-container').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="bi bi-exclamation-triangle"></i><p>請從 LINE 開啟此頁面</p></div>';
+                return;
+            }
+
+            google.script.run
+                .withSuccessHandler(renderCards)
+                .withFailureHandler(showError)
+                .getRentalData('favorites', USER_ID);
+        };
+
+        function renderCards(data) {
+            document.getElementById('loading').style.display = 'none';
+            const container = document.getElementById('card-container');
+
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="bi bi-inbox"></i><p>尚無收藏物件</p><p style="margin-top:8px;font-size:0.8rem;">回到 LINE 輸入「搜尋」開始找房吧！</p></div>';
+                return;
+            }
+
+            document.getElementById('subtitle').textContent = `共 ${data.length} 筆收藏`;
+
+            let html = '';
+            data.forEach(item => {
+                const address = item.address || '地點詳內';
+                const price = String(item.price).replace('NT$', '').trim();
+                const statusBadge = item.status ? `<span class="status-badge">${item.status}</span>` : '';
+                const landlord = item.landlord ? `<div class="card-landlord"><i class="bi bi-person-fill"></i> ${item.landlord}</div>` : '';
+
+                html += `
+          <div class="house-card" id="card-${item.id}">
+            <div class="card-img">
+              <button class="btn-remove" onclick="removeFav('${item.id}', this)" title="取消收藏">
+                <i class="bi bi-x-lg"></i>
+              </button>
+              ${statusBadge}
+              <i class="bi bi-heart-fill"></i>
+            </div>
+            <div class="card-body">
+              <div class="card-title" title="${item.title}">${item.title}</div>
+              <div class="card-address"><i class="bi bi-geo-alt-fill"></i> ${address}</div>
+              ${landlord}
+              <div class="card-footer">
+                <span class="price">$${price}</span>
+                <a href="${item.url}" target="_blank" class="btn-view">查看</a>
+              </div>
+            </div>
+          </div>`;
+            });
+            container.innerHTML = html;
+        }
+
+        function removeFav(itemId, btn) {
+            const card = document.getElementById(`card-${itemId}`);
+            // 樂觀更新：先讓卡片變半透明
+            card.style.opacity = '0.5';
+            card.style.pointerEvents = 'none';
+
+            google.script.run
+                .withSuccessHandler(function (res) {
+                    if (res.success) {
+                        showToast('已取消收藏', 'success');
+                        // 動畫移除卡片
+                        card.style.transform = 'scale(0.9)';
+                        setTimeout(() => {
+                            card.remove();
+                            // 更新計數
+                            const count = document.querySelectorAll('.house-card').length;
+                            document.getElementById('subtitle').textContent = `共 ${count} 筆收藏`;
+                            if (count === 0) {
+                                document.getElementById('card-container').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="bi bi-inbox"></i><p>尚無收藏物件</p></div>';
+                            }
+                        }, 300);
+                    } else {
+                        showToast('刪除失敗', 'error');
+                        card.style.opacity = '1';
+                        card.style.pointerEvents = 'auto';
+                    }
+                })
+                .withFailureHandler(function (err) {
+                    showToast('錯誤：' + err.message, 'error');
+                    card.style.opacity = '1';
+                    card.style.pointerEvents = 'auto';
+                })
+                .removeFromFavorites(USER_ID, itemId);
+        }
+
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.className = 'toast show ' + type;
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+        }
+
+        function showError(error) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('card-container').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="bi bi-exclamation-triangle"></i><p>' + error.message + '</p></div>';
+        }
+    </script>
+</body>
+
+</html>
