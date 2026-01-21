@@ -379,107 +379,108 @@ async function getUserFavorites(userId) {
         console.error('取得用戶收藏失敗:', error.message);
         return [];
     }
+}
 
-    /**
-     * 取得過去 7 天內的新物件
-     */
-    async function getWeeklyNewListings() {
-        const sheets = await initSheets();
+/**
+ * 取得過去 7 天內的新物件
+ */
+async function getWeeklyNewListings() {
+    const sheets = await initSheets();
 
-        try {
-            const response = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
-                range: `${SHEETS.ALL_LISTINGS}!A:J`
-            });
-
-            const values = response.data.values || [];
-            if (values.length <= 1) return [];
-
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            oneWeekAgo.setHours(0, 0, 0, 0);
-
-            // 過濾 7 天內的物件
-            const weeklyListings = values.slice(1).filter(row => {
-                const crawlTimeStr = row[8] || ''; // 2024/1/20 上午 11:32:00
-                // 簡單處理日期格式 (假設是 locale string)
-                // 如果格式不一致可能會需要更強的解析
-                const crawlTime = new Date(crawlTimeStr);
-                return crawlTime >= oneWeekAgo;
-            });
-
-            return weeklyListings.map(row => ({
-                id: row[0],
-                title: row[1],
-                price: parseInt(row[2]) || 0,
-                address: row[3],
-                region: row[4],
-                subway: row[5],
-                tags: row[6],
-                url: row[7],
-                status: row[9]
-            }));
-        } catch (error) {
-            console.error('取得本週物件失敗:', error.message);
-            return [];
-        }
-    }
-
-    /**
-     * 取得週報所需的完整統計資料
-     */
-    async function getAllListingsForWeekReport() {
-        const weeklyListings = await getWeeklyNewListings();
-
-        // 統計數據
-        const stats = {
-            total: weeklyListings.length,
-            byRegion: {},
-            minPrice: Infinity,
-            maxPrice: 0,
-            avgPrice: 0
-        };
-
-        if (stats.total === 0) {
-            stats.minPrice = 0;
-            return { listings: [], stats };
-        }
-
-        let totalPrice = 0;
-
-        weeklyListings.forEach(item => {
-            // 區域統計
-            const region = item.region || '未知';
-            stats.byRegion[region] = (stats.byRegion[region] || 0) + 1;
-
-            // 價格統計
-            if (item.price > 0) {
-                if (item.price < stats.minPrice) stats.minPrice = item.price;
-                if (item.price > stats.maxPrice) stats.maxPrice = item.price;
-                totalPrice += item.price;
-            }
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEETS.ALL_LISTINGS}!A:J`
         });
 
-        stats.avgPrice = Math.round(totalPrice / weeklyListings.length);
+        const values = response.data.values || [];
+        if (values.length <= 1) return [];
 
-        // 取熱門/精選物件 (這裡暫時用最新 5 筆當作精選)
-        // 未來可以改成點擊數最高的
-        const highlights = weeklyListings.slice(0, 5);
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        oneWeekAgo.setHours(0, 0, 0, 0);
 
-        return { listings: highlights, stats };
+        // 過濾 7 天內的物件
+        const weeklyListings = values.slice(1).filter(row => {
+            const crawlTimeStr = row[8] || ''; // 2024/1/20 上午 11:32:00
+            // 簡單處理日期格式 (假設是 locale string)
+            // 如果格式不一致可能會需要更強的解析
+            const crawlTime = new Date(crawlTimeStr);
+            return crawlTime >= oneWeekAgo;
+        });
+
+        return weeklyListings.map(row => ({
+            id: row[0],
+            title: row[1],
+            price: parseInt(row[2]) || 0,
+            address: row[3],
+            region: row[4],
+            subway: row[5],
+            tags: row[6],
+            url: row[7],
+            status: row[9]
+        }));
+    } catch (error) {
+        console.error('取得本週物件失敗:', error.message);
+        return [];
+    }
+}
+
+/**
+ * 取得週報所需的完整統計資料
+ */
+async function getAllListingsForWeekReport() {
+    const weeklyListings = await getWeeklyNewListings();
+
+    // 統計數據
+    const stats = {
+        total: weeklyListings.length,
+        byRegion: {},
+        minPrice: Infinity,
+        maxPrice: 0,
+        avgPrice: 0
+    };
+
+    if (stats.total === 0) {
+        stats.minPrice = 0;
+        return { listings: [], stats };
     }
 
-    module.exports = {
-        initSheets,
-        saveListings,
-        markAsInterested,
-        updateListingStatus,
-        getTodayNewListings,
-        getExistingIds,
-        recordPushedListings,
-        getPushedListingIds,
-        getUserFavorites,
-        getWeeklyNewListings,
-        getAllListingsForWeekReport,
-        SHEETS
-    };
+    let totalPrice = 0;
+
+    weeklyListings.forEach(item => {
+        // 區域統計
+        const region = item.region || '未知';
+        stats.byRegion[region] = (stats.byRegion[region] || 0) + 1;
+
+        // 價格統計
+        if (item.price > 0) {
+            if (item.price < stats.minPrice) stats.minPrice = item.price;
+            if (item.price > stats.maxPrice) stats.maxPrice = item.price;
+            totalPrice += item.price;
+        }
+    });
+
+    stats.avgPrice = Math.round(totalPrice / weeklyListings.length);
+
+    // 取熱門/精選物件 (這裡暫時用最新 5 筆當作精選)
+    // 未來可以改成點擊數最高的
+    const highlights = weeklyListings.slice(0, 5);
+
+    return { listings: highlights, stats };
+}
+
+module.exports = {
+    initSheets,
+    saveListings,
+    markAsInterested,
+    updateListingStatus,
+    getTodayNewListings,
+    getExistingIds,
+    recordPushedListings,
+    getPushedListingIds,
+    getUserFavorites,
+    getWeeklyNewListings,
+    getAllListingsForWeekReport,
+    SHEETS
+};
