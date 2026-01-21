@@ -21,12 +21,14 @@ const IDX_INT_USERID = 10;
  * 處理網頁請求 (doGet)
  */
 function doGet(e) {
-  const page = e.parameter.page || 'all';
+  // 支援 view 或 page 參數
+  const page = e.parameter.view || e.parameter.page || 'all';
   const userId = e.parameter.userId || '';
   
   let template;
   
-  if (page === 'fav') {
+  // 支援 'favorites' (新版) 或 'fav' (舊版)
+  if (page === 'favorites' || page === 'fav') {
     template = HtmlService.createTemplateFromFile('Favorites');
     template.userId = userId;
   } else {
