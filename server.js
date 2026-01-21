@@ -140,40 +140,53 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
         // 決定發送對象
         const targetUsers = (manual && triggeredByUserId) ? [triggeredByUserId] : [...subscribedUsers];
 
-        if (newListings.length > 0) {
-            // 有新物件：發送新物件通知
-            const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${SEARCH_CONFIG.minRent}-${SEARCH_CONFIG.maxRent}元)`;
 
-            for (const userId of targetUsers) {
-                await lineClient.pushMessage({
-                    to: userId,
-                    messages: [{ type: 'text', text: message }]
-                });
-                await sendListingsNotification(userId, newListings);
-            }
-        } else if (manual && listings.length > 0) {
-            // 手動搜尋且無新物件：顯示全部結果
-            const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
-            const message = `📋 目前沒有新物件，但為您列出資料庫中的 ${listings.length} 間物件：\n(監控區域: ${targetNames})`;
+        const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec';
 
-            const listingsToShow = listings.slice(0, 10);
-            for (const userId of targetUsers) {
-                await lineClient.pushMessage({
-                    to: userId,
-                    messages: [{ type: 'text', text: message }]
-                });
-                await sendListingsNotification(userId, listingsToShow);
-            }
-        } else {
-            // 沒有新物件（自動排程）
-            const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
-            const message = `📅 [每日回報] ${new Date().toLocaleDateString()}\n目前無新上架物件。\n機器人運作正常 ✅\n(監控區域: ${targetNames})`;
+        for (const userId of targetUsers) {
+            let message = '';
 
-            for (const userId of targetUsers) {
-                await lineClient.pushMessage({
-                    to: userId,
-                    messages: [{ type: 'text', text: message }]
+            if (newListings.length > 0) {
+                // 有新物件：發送通知
+                message += `🏠 找到 ${newListings.length} 間新物件！\n`;
+                message += `(監控區域: ${SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、')})\n\n`;
+
+                // 列出前 5 筆新物件
+                newListings.slice(0, 5).forEach((item, index) => {
+                    message += `${index + 1}. ${item.title}\n`;
+                    message += `💰 ${item.price} 元 / ${item.region}\n`;
+                    message += `📍 ${item.address}\n`;
+                    message += `🔗 ${item.url}\n\n`;
                 });
+
+                if (newListings.length > 5) {
+                    message += `...還有 ${newListings.length - 5} 間物件\n\n`;
+                }
+
+                message += `👀 查看完整清單 (含篩選/排序)：\n`;
+                message += `${gasWebAppUrl}?userId=${userId}\n`;
+
+                await lineClient.pushMessage({ to: userId, messages: [{ type: 'text', text: message }] });
+                console.log(`✅ 已發送通知給用戶 ${userId}`);
+
+                // 記錄推播過的物件 (避免重複)
+                if (newListings.length > 0) {
+                    const pushedIds = newListings.map(l => l.id);
+                    await recordPushedListings(userId, pushedIds);
+                }
+
+            } else {
+                // 無新物件：Smart Push 邏輯
+                if (manual) {
+                    // 手動觸發時，還是要回報「沒東西」
+                    message = '📭 目前沒有發現符合條件的新物件。';
+                    const targetNames = SEARCH_CONFIG.targets.map(t => t.name.split('-')[1]).join('、');
+                    message += `\n(監控區域: ${targetNames})`;
+                    await lineClient.pushMessage({ to: userId, messages: [{ type: 'text', text: message }] });
+                } else {
+                    // 排程觸發且無新物件 -> 安靜 (不發送)
+                    console.log(`[Smart Push] 用戶 ${userId} 無新物件，跳過推播`);
+                }
             }
         }
 
@@ -752,6 +765,90 @@ cron.schedule(cronSchedule, async () => {
 }, {
     timezone: 'Asia/Taipei'
 });
+
+// 每週一排程：發送週報總結
+const weeklySchedule = process.env.WEEKLY_SCHEDULE || '0 10 * * 1';
+console.log(`📅 每週報告排程: ${weeklySchedule}`);
+
+cron.schedule(weeklySchedule, async () => {
+    console.log('📅 每週報告任務觸發');
+    await sendWeeklyReports();
+}, {
+    timezone: 'Asia/Taipei'
+});
+
+/**
+ * 為所有用戶發送週報
+ */
+async function sendWeeklyReports() {
+    const users = await getAllSubscribedUsers();
+    console.log(`準備發送週報給 ${users.length} 位用戶...`);
+
+    for (const userId of users) {
+        try {
+            const report = await generateWeeklyReport(userId);
+            if (report) {
+                await lineClient.pushMessage({ to: userId, messages: [{ type: 'text', text: report }] });
+                console.log(`✅ 已發送週報給 ${userId}`);
+            }
+        } catch (error) {
+            console.error(`❌ 發送週報失敗 (${userId}):`, error.message);
+        }
+    }
+}
+
+/**
+ * 生成週報內容
+ */
+async function generateWeeklyReport(userId) {
+    const { getAllListingsForWeekReport } = require('./sheets');
+    const { listings, stats } = await getAllListingsForWeekReport();
+
+    if (stats.total === 0) {
+        // 如果本週完全沒物件，也可以選擇不發，或是發一個簡單的總結
+        return `📊 【591 租屋週報】\n\n本週沒有發現符合條件的新物件。\n\n建議您嘗試調整搜尋條件 (租金/區域) 以獲得更多結果。`;
+    }
+
+    const { getUser } = require('./users');
+    const user = await getUser(userId);
+    const userName = user?.displayName || '租屋戰士';
+
+    let report = `📊 【591 租屋週報】\n`;
+    report += `Hi ${userName}，這是過去 7 天的租屋市場摘要：\n\n`;
+
+    // 1️⃣ 整體統計
+    report += `📈 本週新上架：${stats.total} 間\n`;
+    report += `💰 平均租金：${stats.avgPrice} 元\n`;
+    report += `💲 最低租金：${stats.minPrice} 元\n\n`;
+
+    // 2️⃣ 區域分佈
+    report += `🗺️ 區域分佈：\n`;
+    const sortedRegions = Object.entries(stats.byRegion)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3); // 取前三名
+
+    sortedRegions.forEach(([region, count]) => {
+        report += `- ${region}: ${count} 間\n`;
+    });
+    report += '\n';
+
+    // 3️⃣ 重點物件推薦 (Top 5)
+    report += `🔥 本週精選 Top 5：\n`;
+    listings.forEach((item, index) => {
+        report += `${index + 1}. ${item.title}\n`;
+        report += `   💰 ${item.price} | 📍 ${item.region}\n`;
+        report += `   🔗 ${item.url}\n`;
+    });
+
+    // 4️⃣ 結尾與連結
+    report += `\n👀 查看完整清單 (含篩選/排序)：\n`;
+    // 取得 GAS URL
+    const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec';
+    report += `${gasWebAppUrl}?userId=${userId}\n\n`;
+    report += `💡 輸入「搜尋」立即查看最新物件`;
+
+    return report;
+}
 
 // ============================================
 // 啟動伺服器
