@@ -64,9 +64,10 @@ const SEARCH_CONFIG = {
 
 // 儲存使用者 ID（第一次發訊息時會記錄）
 let subscribedUsers = new Set();
-if (process.env.LINE_USER_ID) {
-    subscribedUsers.add(process.env.LINE_USER_ID);
-}
+// 舊版單用戶邏輯已移除，不再預先載入 LINE_USER_ID
+// if (process.env.LINE_USER_ID) {
+//     subscribedUsers.add(process.env.LINE_USER_ID);
+// }
 
 // 爬蟲狀態鎖
 let isCrawling = false;
