@@ -372,7 +372,7 @@ async function getAllSubscribedUsers() {
         if (values.length <= 1) return [];
 
         return values.slice(1)
-            .filter(row => row[7] === 'TRUE') // subscribed = TRUE
+            .filter(row => String(row[7]).toUpperCase() === 'TRUE') // subscribed = TRUE (case insensitive)
             .map(row => ({
                 userId: row[0],
                 displayName: row[1] || '',
