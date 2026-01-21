@@ -300,10 +300,16 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// 手動觸發爬蟲
+// 手動觸發爬蟲 (單次全域)
 app.get('/crawl', async (req, res) => {
-    res.json({ message: '爬蟲任務已啟動' });
+    res.json({ message: '爬蟲任務已啟動 (模式: 單次全域搜尋)' });
     runCrawlTask(true);
+});
+
+// 手動觸發排程 (多用戶迴圈)
+app.get('/test-schedule', async (req, res) => {
+    res.json({ message: '排程測試已啟動 (模式: 多用戶逐一搜尋)' });
+    runScheduledTasks();
 });
 
 // LINE Webhook
@@ -667,7 +673,8 @@ app.post('/webhook', express.json(), async (req, res) => {
 const cronSchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
 console.log(`⏰ 排程設定: ${cronSchedule}`);
 
-cron.schedule(cronSchedule, async () => {
+// 定義多用戶爬蟲任務邏輯
+async function runScheduledTasks() {
     console.log('⏰ 定時任務觸發 (多用戶模式)');
 
     if (isCrawling) {
@@ -717,7 +724,9 @@ cron.schedule(cronSchedule, async () => {
     } finally {
         isCrawling = false;
     }
-}, {
+}
+
+cron.schedule(cronSchedule, runScheduledTasks, {
     timezone: 'Asia/Taipei'
 });
 
