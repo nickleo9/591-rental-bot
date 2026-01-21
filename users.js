@@ -365,7 +365,7 @@ async function getAllSubscribedUsers() {
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:J`
+            range: `${SHEET_NAME}!A:K`
         });
 
         const values = response.data.values || [];
@@ -381,7 +381,8 @@ async function getAllSubscribedUsers() {
                 minRent: parseInt(row[4]) || DEFAULT_SETTINGS.minRent,
                 maxRent: parseInt(row[5]) || DEFAULT_SETTINGS.maxRent,
                 keywords: row[6] || '',
-                subscribed: true
+                subscribed: true,
+                targets: row[10] || '' // targets JSON string
             }));
     } catch (error) {
         console.error('取得訂閱用戶失敗:', error.message);

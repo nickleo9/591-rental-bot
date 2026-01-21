@@ -617,9 +617,56 @@ app.post('/webhook', express.json(), async (req, res) => {
 const cronSchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
 console.log(`⏰ 排程設定: ${cronSchedule}`);
 
-cron.schedule(cronSchedule, () => {
-    console.log('⏰ 定時任務觸發');
-    runCrawlTask();
+cron.schedule(cronSchedule, async () => {
+    console.log('⏰ 定時任務觸發 (多用戶模式)');
+
+    if (isCrawling) {
+        console.log('⚠️ 上次爬蟲尚未結束，跳過本次排程');
+        return;
+    }
+
+    isCrawling = true;
+
+    try {
+        const users = await getAllSubscribedUsers();
+        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行爬蟲...`);
+
+        for (const user of users) {
+            let userTargets = [];
+
+            // 解析 targets
+            if (user.targets) {
+                try {
+                    userTargets = JSON.parse(user.targets);
+                } catch (e) {
+                    console.error(`解析用戶 ${user.userId} targets 失敗:`, e);
+                }
+            }
+
+            // 如果沒有 targets，使用預設值
+            if (!userTargets || userTargets.length === 0) {
+                userTargets = SEARCH_CONFIG.targets;
+            }
+
+            // 執行爬蟲
+            await runCrawlTaskForUser(
+                user.userId,
+                userTargets,
+                user.minRent,
+                user.maxRent
+            );
+
+            // 避免過快請求，休息 5 秒
+            await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+
+        console.log('🎉 所有用戶爬蟲任務執行完畢');
+
+    } catch (error) {
+        console.error('排程執行錯誤:', error);
+    } finally {
+        isCrawling = false;
+    }
 }, {
     timezone: 'Asia/Taipei'
 });
