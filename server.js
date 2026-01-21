@@ -449,7 +449,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                         else if (lowerText.includes('收藏') || lowerText.includes('有興趣') || lowerText === 'favorites') {
                             await startLoading(event.source.userId, 15);
                             const favorites = await getUserFavorites(event.source.userId);
-                            await sendMyFavorites(event.source.userId, favorites, event.replyToken);
+                            await sendMyFavorites(event.source.userId, favorites, event.replyToken, gasWebAppUrl);
                         }
                         // 暫停推播
                         else if (lowerText === '暫停' || lowerText === 'pause' || lowerText === 'stop') {

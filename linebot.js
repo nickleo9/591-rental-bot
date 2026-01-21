@@ -492,7 +492,7 @@ async function sendUserSettings(userId, user, replyToken = null) {
 /**
  * 發送用戶收藏清單
  */
-async function sendMyFavorites(userId, favorites, replyToken = null) {
+async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUrl = null) {
     if (!favorites || favorites.length === 0) {
         const message = {
             type: 'text',
@@ -573,7 +573,9 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
         }
     }));
 
-    const gasUrl = `https://script.google.com/macros/s/AKfycbxU7rZrSagLxBBPHBIu_r7ac_AelcX7l9u6-FF2T7xewbIlKwsh7A5_HouoVPBC72ms/exec?userId=${userId}`;
+    const gasUrl = gasWebAppUrl
+        ? `${gasWebAppUrl}?userId=${userId}&view=favorites`
+        : `https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec?userId=${userId}&view=favorites`;
 
     const summaryMessage = {
         type: 'text',
