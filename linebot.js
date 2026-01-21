@@ -372,6 +372,238 @@ async function getUserProfile(userId) {
     }
 }
 
+/**
+ * 發送歡迎訊息
+ */
+async function sendWelcomeMessage(userId, displayName = '') {
+    const greeting = displayName ? `${displayName}，` : '';
+
+    await client.pushMessage({
+        to: userId,
+        messages: [{
+            type: 'text',
+            text: `🏠 ${greeting}歡迎使用 591 租屋小幫手！
+
+我會每天幫你搜尋符合條件的租屋物件，並透過 LINE 通知你。
+
+📍 預設地區：台北市
+💰 預設租金：8,000 - 15,000 元
+
+🎮 快速指令：
+• 輸入「指令」查看完整說明
+• 輸入「設定」查看個人設定
+• 輸入「地區 XX」更改地區
+• 輸入「租金 XXXX-XXXX」調整租金
+• 輸入「搜尋」立即開始找房！
+
+祝你早日找到理想的房子！🎉`
+        }]
+    });
+}
+
+/**
+ * 發送用戶設定訊息
+ */
+async function sendUserSettings(userId, user, replyToken = null) {
+    const message = {
+        type: 'flex',
+        altText: '個人設定',
+        contents: {
+            type: 'bubble',
+            size: 'kilo',
+            header: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [{
+                    type: 'text',
+                    text: '⚙️ 個人設定',
+                    weight: 'bold',
+                    size: 'lg',
+                    color: '#FFFFFF'
+                }],
+                backgroundColor: '#3498DB',
+                paddingAll: 'lg'
+            },
+            body: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        contents: [
+                            { type: 'text', text: '📍 地區', size: 'sm', color: '#888888', flex: 2 },
+                            { type: 'text', text: user.region || '台北市', size: 'sm', weight: 'bold', flex: 3 }
+                        ]
+                    },
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        contents: [
+                            { type: 'text', text: '💰 租金', size: 'sm', color: '#888888', flex: 2 },
+                            { type: 'text', text: `${(user.minRent || 8000).toLocaleString()} - ${(user.maxRent || 15000).toLocaleString()} 元`, size: 'sm', weight: 'bold', flex: 3 }
+                        ],
+                        margin: 'md'
+                    },
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        contents: [
+                            { type: 'text', text: '🔑 關鍵字', size: 'sm', color: '#888888', flex: 2 },
+                            { type: 'text', text: user.keywords || '(未設定)', size: 'sm', flex: 3 }
+                        ],
+                        margin: 'md'
+                    },
+                    {
+                        type: 'box',
+                        layout: 'horizontal',
+                        contents: [
+                            { type: 'text', text: '🔔 推播', size: 'sm', color: '#888888', flex: 2 },
+                            { type: 'text', text: user.subscribed ? '已開啟' : '已暫停', size: 'sm', color: user.subscribed ? '#27AE60' : '#E74C3C', weight: 'bold', flex: 3 }
+                        ],
+                        margin: 'md'
+                    }
+                ],
+                spacing: 'sm'
+            },
+            footer: {
+                type: 'box',
+                layout: 'vertical',
+                contents: [{
+                    type: 'text',
+                    text: '輸入「指令」查看更多操作',
+                    size: 'xs',
+                    color: '#AAAAAA',
+                    align: 'center'
+                }]
+            }
+        }
+    };
+
+    if (replyToken) {
+        await client.replyMessage({
+            replyToken,
+            messages: [message]
+        });
+    } else {
+        await client.pushMessage({
+            to: userId,
+            messages: [message]
+        });
+    }
+}
+
+/**
+ * 發送用戶收藏清單
+ */
+async function sendMyFavorites(userId, favorites, replyToken = null) {
+    if (!favorites || favorites.length === 0) {
+        const message = {
+            type: 'text',
+            text: '📭 你還沒有收藏任何物件\n\n瀏覽物件時，點擊「有興趣👍」按鈕即可加入收藏！'
+        };
+
+        if (replyToken) {
+            await client.replyMessage({ replyToken, messages: [message] });
+        } else {
+            await client.pushMessage({ to: userId, messages: [message] });
+        }
+        return;
+    }
+
+    // 建立收藏清單 Flex Message
+    const bubbles = favorites.slice(0, 10).map((fav, index) => ({
+        type: 'bubble',
+        size: 'kilo',
+        body: {
+            type: 'box',
+            layout: 'vertical',
+            contents: [
+                {
+                    type: 'text',
+                    text: `${index + 1}. ${fav.title || '未知標題'}`,
+                    weight: 'bold',
+                    size: 'sm',
+                    wrap: true,
+                    maxLines: 2
+                },
+                {
+                    type: 'box',
+                    layout: 'horizontal',
+                    contents: [
+                        { type: 'text', text: '💰', size: 'sm', flex: 0 },
+                        { type: 'text', text: `${fav.price.toLocaleString()} 元/月`, size: 'sm', color: '#E74C3C', weight: 'bold', margin: 'sm' }
+                    ],
+                    margin: 'md'
+                },
+                {
+                    type: 'box',
+                    layout: 'horizontal',
+                    contents: [
+                        { type: 'text', text: '📍', size: 'sm', flex: 0 },
+                        { type: 'text', text: fav.address || '未知地址', size: 'xs', color: '#666666', margin: 'sm', wrap: true }
+                    ],
+                    margin: 'sm'
+                },
+                {
+                    type: 'box',
+                    layout: 'horizontal',
+                    contents: [
+                        { type: 'text', text: '📞', size: 'sm', flex: 0 },
+                        { type: 'text', text: fav.phone || '無電話', size: 'xs', color: '#666666', margin: 'sm' }
+                    ],
+                    margin: 'sm'
+                }
+            ],
+            spacing: 'sm'
+        },
+        footer: {
+            type: 'box',
+            layout: 'horizontal',
+            spacing: 'sm',
+            contents: [
+                {
+                    type: 'button',
+                    style: 'primary',
+                    height: 'sm',
+                    action: {
+                        type: 'uri',
+                        label: '查看',
+                        uri: fav.url
+                    },
+                    color: '#3498DB'
+                }
+            ]
+        }
+    }));
+
+    const summaryMessage = {
+        type: 'text',
+        text: `⭐ 你的收藏清單 (${favorites.length} 間)\n\n以下是你標記「有興趣」的物件：`
+    };
+
+    const carouselMessage = {
+        type: 'flex',
+        altText: `你的收藏清單 (${favorites.length} 間)`,
+        contents: {
+            type: 'carousel',
+            contents: bubbles
+        }
+    };
+
+    if (replyToken) {
+        await client.replyMessage({
+            replyToken,
+            messages: [summaryMessage, carouselMessage]
+        });
+    } else {
+        await client.pushMessage({
+            to: userId,
+            messages: [summaryMessage, carouselMessage]
+        });
+    }
+}
+
 module.exports = {
     client,
     sendListingsNotification,
@@ -379,5 +611,8 @@ module.exports = {
     lineMiddleware,
     getUserProfile,
     startLoading,
+    sendWelcomeMessage,
+    sendUserSettings,
+    sendMyFavorites,
     config
 };

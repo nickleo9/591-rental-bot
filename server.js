@@ -15,8 +15,35 @@ const express = require('express');
 const cron = require('node-cron');
 // 引入其他模組
 const { scrape591, buildSearchUrl, SEARCH_CONFIG: ScraperConfig } = require('./scraper');
-const { sendListingsNotification, handlePostback, client: lineClient, startLoading } = require('./linebot');
-const { saveListings, markAsInterested, initSheets } = require('./sheets');
+const {
+    sendListingsNotification,
+    handlePostback,
+    client: lineClient,
+    startLoading,
+    sendWelcomeMessage,
+    sendUserSettings,
+    sendMyFavorites,
+    getUserProfile
+} = require('./linebot');
+const {
+    saveListings,
+    markAsInterested,
+    initSheets,
+    recordPushedListings,
+    getPushedListingIds,
+    getUserFavorites
+} = require('./sheets');
+const {
+    createUser,
+    getUser,
+    updateUserSettings,
+    getAllSubscribedUsers,
+    toggleSubscription,
+    parseRegion,
+    getSupportedRegions,
+    SECTIONS,
+    REGION_NAMES
+} = require('./users');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -272,17 +299,37 @@ app.post('/webhook', express.json(), async (req, res) => {
 👨‍💻 開發者: Nick
 🔧 系統狀態: 託管於 Render (自動除錯紀錄)`);
                         }
-                        // 查看狀態
-                        else if (lowerText === '狀態' || lowerText === 'status') {
-                            const targetAreas = SEARCH_CONFIG.targets.map(t => t.name).join('、');
-                            await replyText(event.replyToken,
-                                `📊 目前設定：
-
-💰 租金範圍：${SEARCH_CONFIG.minRent.toLocaleString()} - ${SEARCH_CONFIG.maxRent.toLocaleString()} 元
-🏙️ 搜尋地區：${targetAreas}
-⏰ 每日通知：11:00
-
-輸入「指令」查看更多操作`);
+                        // 查看設定 (個人化)
+                        else if (lowerText === '設定' || lowerText === '狀態' || lowerText === 'status') {
+                            await startLoading(event.source.userId, 10);
+                            const user = await getUser(event.source.userId) || await createUser(event.source.userId);
+                            await sendUserSettings(event.source.userId, user, event.replyToken);
+                        }
+                        // 我的收藏
+                        else if (lowerText.includes('收藏') || lowerText.includes('有興趣') || lowerText === 'favorites') {
+                            await startLoading(event.source.userId, 15);
+                            const favorites = await getUserFavorites(event.source.userId);
+                            await sendMyFavorites(event.source.userId, favorites, event.replyToken);
+                        }
+                        // 暫停推播
+                        else if (lowerText === '暫停' || lowerText === 'pause' || lowerText === 'stop') {
+                            await toggleSubscription(event.source.userId, false);
+                            await replyText(event.replyToken, '🔕 已暫停每日推播\n\n輸入「恢復」重新開啟');
+                        }
+                        // 恢復推播
+                        else if (lowerText === '恢復' || lowerText === 'resume' || lowerText === 'start') {
+                            await toggleSubscription(event.source.userId, true);
+                            await replyText(event.replyToken, '🔔 已恢復每日推播\n\n每天 11:00 會推播符合你條件的新物件');
+                        }
+                        // 設定關鍵字
+                        else if (text.startsWith('關鍵字')) {
+                            const keyword = text.replace('關鍵字', '').trim();
+                            await updateUserSettings(event.source.userId, { keywords: keyword });
+                            if (keyword) {
+                                await replyText(event.replyToken, `✅ 搜尋關鍵字已設定為「${keyword}」\n\n輸入「搜尋」立即查找`);
+                            } else {
+                                await replyText(event.replyToken, '✅ 已清除搜尋關鍵字');
+                            }
                         }
                         // 調整租金
                         else if (text.startsWith('租金')) {
@@ -401,20 +448,25 @@ app.post('/webhook', express.json(), async (req, res) => {
                     const result = await handlePostback(event);
 
                     if (result && result.action === 'interested') {
-                        // 標記為有興趣 (含完整資訊)
+                        // 標記為有興趣 (含完整資訊 + userId)
                         await markAsInterested(
                             result.id,
                             result.price,
                             result.title,
                             result.address,
-                            result.contactInfo
+                            result.contactInfo,
+                            event.source.userId
                         );
                     }
                     break;
 
                 case 'follow':
-                    // 用戶加入好友
+                    // 新用戶加入好友
                     console.log('🎉 新用戶加入:', event.source.userId);
+                    const profile = await getUserProfile(event.source.userId);
+                    const displayName = profile?.displayName || '';
+                    await createUser(event.source.userId, displayName);
+                    await sendWelcomeMessage(event.source.userId, displayName);
                     break;
             }
         }

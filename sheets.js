@@ -166,19 +166,20 @@ async function getExistingIds() {
  * @param {string} title - 物件標題
  * @param {string} address - 物件地址
  * @param {object} contactInfo - 聯絡資訊 {phone, line, landlordName}
+ * @param {string} userId - LINE 用戶 ID
  */
-async function markAsInterested(listingId, price, title = '', address = '', contactInfo = {}) {
+async function markAsInterested(listingId, price, title = '', address = '', contactInfo = {}, userId = '') {
     const sheets = await initSheets();
     await ensureSheetExists(SHEETS.INTERESTED);
 
     const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
     const { phone = '', line = '', landlordName = '' } = contactInfo;
 
-    // 添加到「有興趣」工作表 (10 欄完整資訊)
-    // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態
+    // 添加到「有興趣」工作表 (11 欄完整資訊)
+    // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.INTERESTED}!A:J`,
+        range: `${SHEETS.INTERESTED}!A:K`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
@@ -192,7 +193,8 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
                 phone,
                 line,
                 timestamp,
-                '待聯繫'
+                '待聯繫',
+                userId
             ]]
         }
     });
@@ -200,9 +202,10 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
     // 更新主工作表的狀態
     await updateListingStatus(listingId, '有興趣 ⭐');
 
-    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(標題: ${title}, 電話: ${phone})`);
+    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(用戶: ${userId}, 標題: ${title})`);
     return true;
 }
+
 
 /**
  * 更新物件狀態
@@ -274,6 +277,95 @@ async function getTodayNewListings() {
     }
 }
 
+/**
+ * 記錄已推播的物件 (避免重複推播)
+ * 工作表結構: userId, listingId, pushedAt
+ */
+async function recordPushedListings(userId, listingIds) {
+    const sheets = await initSheets();
+    await ensureSheetExists('推播紀錄');
+
+    const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+    const rows = listingIds.map(id => [userId, id, timestamp]);
+
+    await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: '推播紀錄!A:C',
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: rows }
+    });
+
+    console.log(`📝 記錄 ${listingIds.length} 筆推播紀錄 (用戶: ${userId})`);
+}
+
+/**
+ * 取得用戶已推播的物件 ID
+ */
+async function getPushedListingIds(userId) {
+    const sheets = await initSheets();
+
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: '推播紀錄!A:B'
+        });
+
+        const values = response.data.values || [];
+        const pushedIds = new Set();
+
+        for (const row of values) {
+            if (row[0] === userId && row[1]) {
+                pushedIds.add(row[1]);
+            }
+        }
+
+        return pushedIds;
+    } catch (error) {
+        console.log('取得推播紀錄失敗:', error.message);
+        return new Set();
+    }
+}
+
+/**
+ * 取得用戶的收藏清單
+ * 工作表結構: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
+ */
+async function getUserFavorites(userId) {
+    const sheets = await initSheets();
+
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEETS.INTERESTED}!A:K`
+        });
+
+        const values = response.data.values || [];
+        if (values.length <= 1) return [];
+
+        // 過濾該用戶的收藏 (userId 在第 K 欄，索引 10)
+        const userFavorites = values.slice(1)
+            .filter(row => row[10] === userId)
+            .map(row => ({
+                id: row[0],
+                title: row[1] || '',
+                price: parseInt(row[2]) || 0,
+                address: row[3] || '',
+                url: row[4] || `https://rent.591.com.tw/${row[0]}`,
+                landlordName: row[5] || '',
+                phone: row[6] || '',
+                line: row[7] || '',
+                clickTime: row[8] || '',
+                status: row[9] || ''
+            }));
+
+        return userFavorites;
+    } catch (error) {
+        console.error('取得用戶收藏失敗:', error.message);
+        return [];
+    }
+}
+
 module.exports = {
     initSheets,
     saveListings,
@@ -281,5 +373,8 @@ module.exports = {
     updateListingStatus,
     getTodayNewListings,
     getExistingIds,
+    recordPushedListings,
+    getPushedListingIds,
+    getUserFavorites,
     SHEETS
 };
