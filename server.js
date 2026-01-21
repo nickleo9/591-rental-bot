@@ -686,7 +686,13 @@ async function runScheduledTasks() {
 
     try {
         const users = await getAllSubscribedUsers();
-        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行爬蟲...`);
+        console.log(`📋 [排程] 取得訂閱用戶列表完成，共有 ${users.length} 位用戶`);
+
+        if (users.length === 0) {
+            console.log('⚠️ [排程警告] 沒有找到任何訂閱用戶！請檢查 Google Sheets "subscribed" 欄位');
+        }
+
+        console.log(`🚀 開始逐一執行爬蟲...`);
 
         for (const user of users) {
             let userTargets = [];
