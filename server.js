@@ -62,7 +62,7 @@ const SEARCH_CONFIG = {
     maxRent: parseInt(process.env.MAX_RENT) || 12000
 };
 
-const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec';
+const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbyjwWMVrHYEbkRvcrNmiPNayyDIMLW_708iTNVMBIh7YTIYKFdLb_hqszkzF8xzuISh/exec';
 
 // 儲存使用者 ID（第一次發訊息時會記錄）
 let subscribedUsers = new Set();

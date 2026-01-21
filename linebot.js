@@ -575,7 +575,7 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
 
     const gasUrl = gasWebAppUrl
         ? `${gasWebAppUrl}?userId=${userId}&view=favorites`
-        : `https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec?userId=${userId}&view=favorites`;
+        : `https://script.google.com/macros/s/AKfycbyjwWMVrHYEbkRvcrNmiPNayyDIMLW_708iTNVMBIh7YTIYKFdLb_hqszkzF8xzuISh/exec?userId=${userId}&view=favorites`;
 
     const summaryMessage = {
         type: 'text',
