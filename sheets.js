@@ -175,6 +175,15 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
     const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
     const { phone = '', line = '', landlordName = '' } = contactInfo;
 
+    // 檢查是否已經收藏過
+    if (userId) {
+        const existingFavorites = await getUserFavorites(userId);
+        if (existingFavorites.some(f => f.id === listingId)) {
+            console.log(`⚠️ 物件 ${listingId} 已經在用戶 ${userId} 的收藏清單中，跳過重複新增`);
+            return true;
+        }
+    }
+
     // 添加到「有興趣」工作表 (11 欄完整資訊)
     // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
     await sheets.spreadsheets.values.append({

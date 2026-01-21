@@ -528,11 +528,38 @@ app.post('/webhook', express.json(), async (req, res) => {
                             console.log(`用戶 ${event.source.userId} 更新監控區域:`, newTargets);
                             return replyText(event.replyToken, message);
                         }
-                        // 手動搜尋 (使用用戶個人設定)
+                        // 手動搜尋 (可支援「搜尋 中山」直接切換地區)
                         else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
+                            const fullArgs = text.replace(/搜尋|找房|開始/g, '').trim();
+
+                            // 如果有參數，先嘗試更新地區
+                            if (fullArgs) {
+                                const { newTargets, message, error } = parseRegionArgs(fullArgs);
+
+                                if (error) {
+                                    return replyText(event.replyToken, error);
+                                }
+
+                                if (newTargets.length > 0) {
+                                    // 儲存新的地區設定
+                                    const regionDisplay = newTargets.map(t => t.name.split('-')[1] || t.name).join('、');
+                                    await updateUserSettings(event.source.userId, {
+                                        targets: JSON.stringify(newTargets),
+                                        region: regionDisplay || '台北市'
+                                    });
+                                    console.log(`用戶 ${event.source.userId} 透過搜尋指令更新地區:`, newTargets);
+
+                                    // 告知用戶已切換
+                                    await lineClient.pushMessage({
+                                        to: event.source.userId,
+                                        messages: [{ type: 'text', text: `🔄 已為您切換至【${regionDisplay}】並開始搜尋...` }]
+                                    });
+                                }
+                            }
+
                             await startLoading(event.source.userId, 40);
 
-                            // 讀取用戶設定
+                            // 讀取用戶設定 (此時已經是更新後的)
                             const user = await getUser(event.source.userId);
                             console.log('📋 用戶設定:', user ? JSON.stringify({
                                 region: user.region,
@@ -557,16 +584,18 @@ app.post('/webhook', express.json(), async (req, res) => {
                                     } catch (e) {
                                         console.log('❌ 解析 targets 失敗，使用預設:', e.message);
                                     }
-                                } else {
-                                    console.log('⚠️ 用戶 targets 為空，使用預設');
                                 }
                             }
 
                             const targetNames = userTargets.map(t => t.name.split('-')[1] || t.name).join('、');
-                            await replyText(event.replyToken, `🔍 正在搜尋中...
 
+                            // 避免重複傳送訊息 (如果剛剛已經傳了切換訊息，這裡可以簡化)
+                            if (!fullArgs) {
+                                await replyText(event.replyToken, `🔍 正在搜尋中...
+                                
 📍 地區：${targetNames}
 💰 租金：${userMinRent.toLocaleString()} - ${userMaxRent.toLocaleString()} 元`);
+                            }
 
                             // 使用用戶設定執行爬蟲
                             runCrawlTaskForUser(event.source.userId, userTargets, userMinRent, userMaxRent);
@@ -704,3 +733,74 @@ async function start() {
 }
 
 start();
+
+// ============================================
+// 輔助函式
+// ============================================
+
+/**
+ * 解析地區參數
+ * @param {string} fullArgs - 參數字串 (如 "中山" 或 "台北")
+ */
+function parseRegionArgs(fullArgs) {
+    const args = fullArgs.split(/\s+/);
+    let message = '';
+    let newTargets = [];
+    let error = null;
+
+    if (args[0] === '預設') {
+        newTargets = [
+            { region: 1, section: 1, name: '台北市-中正區' },
+            { region: 1, section: 3, name: '台北市-中山區' },
+            { region: 1, section: 2, name: '台北市-大同區' },
+            { region: 3, section: 37, name: '新北市-永和區' }
+        ];
+        message = '✅ 已恢復【預設監控區域】：中正、中山、大同、永和';
+    } else if (args[0] === '全' || args[0] === '全部') {
+        newTargets = [
+            { region: 1, name: '台北市全區' },
+            { region: 3, name: '新北市全區' }
+        ];
+        message = '✅ 已切換為【搜尋全台北 + 全新北】';
+    } else if (args[0] === '台北') {
+        newTargets = [{ region: 1, name: '台北市全區' }];
+        message = '✅ 已切換為【搜尋全台北市】';
+    } else if (args[0] === '新北') {
+        newTargets = [{ region: 3, name: '新北市全區' }];
+        message = '✅ 已切換為【搜尋全新北市】';
+    } else {
+        // 指定特定行政區
+        const sectionMap = ScraperConfig.sections;
+        const unknownArgs = [];
+
+        for (const arg of args) {
+            const cleanArg = arg.replace('區', '') + '區';
+            const cleanArgShort = arg.replace('區', '');
+            let sectionId = sectionMap[cleanArg] || sectionMap[cleanArgShort];
+
+            if (sectionId) {
+                const regionId = sectionId <= 20 ? 1 : 3;
+                const regionName = regionId === 1 ? '台北市' : '新北市';
+                newTargets.push({
+                    region: regionId,
+                    section: sectionId,
+                    name: `${regionName}-${cleanArg}`
+                });
+            } else {
+                unknownArgs.push(arg);
+            }
+        }
+
+        if (newTargets.length > 0) {
+            const names = newTargets.map(t => t.name.split('-')[1]).join('、');
+            message = `✅ 已設定監控區域：${names}`;
+            if (unknownArgs.length > 0) {
+                message += `\n(⚠️ 未知區域：${unknownArgs.join('、')})`;
+            }
+        } else {
+            error = `❌ 找不到區域：${unknownArgs.join(' ')}\n請確認名稱是否正確 (例如：中山、淡水)`;
+        }
+    }
+
+    return { newTargets, message, error };
+}
