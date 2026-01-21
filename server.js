@@ -300,16 +300,10 @@ app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
 
-// 手動觸發爬蟲 (單次全域)
+// 手動觸發爬蟲
 app.get('/crawl', async (req, res) => {
-    res.json({ message: '爬蟲任務已啟動 (模式: 單次全域搜尋)' });
+    res.json({ message: '爬蟲任務已啟動' });
     runCrawlTask(true);
-});
-
-// 手動觸發排程 (多用戶迴圈)
-app.get('/test-schedule', async (req, res) => {
-    res.json({ message: '排程測試已啟動 (模式: 多用戶逐一搜尋)' });
-    runScheduledTasks();
 });
 
 // LINE Webhook
@@ -669,12 +663,11 @@ app.post('/webhook', express.json(), async (req, res) => {
 // 排程設定
 // ============================================
 
-// 每天 11:00 執行（台灣時間）
-const cronSchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
+// 每天 15:20 執行（台灣時間）
+const cronSchedule = process.env.CRON_SCHEDULE || '20 15 * * *';
 console.log(`⏰ 排程設定: ${cronSchedule}`);
 
-// 定義多用戶爬蟲任務邏輯
-async function runScheduledTasks() {
+cron.schedule(cronSchedule, async () => {
     console.log('⏰ 定時任務觸發 (多用戶模式)');
 
     if (isCrawling) {
@@ -686,13 +679,7 @@ async function runScheduledTasks() {
 
     try {
         const users = await getAllSubscribedUsers();
-        console.log(`📋 [排程] 取得訂閱用戶列表完成，共有 ${users.length} 位用戶`);
-
-        if (users.length === 0) {
-            console.log('⚠️ [排程警告] 沒有找到任何訂閱用戶！請檢查 Google Sheets "subscribed" 欄位');
-        }
-
-        console.log(`🚀 開始逐一執行爬蟲...`);
+        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行爬蟲...`);
 
         for (const user of users) {
             let userTargets = [];
@@ -730,9 +717,7 @@ async function runScheduledTasks() {
     } finally {
         isCrawling = false;
     }
-}
-
-cron.schedule(cronSchedule, runScheduledTasks, {
+}, {
     timezone: 'Asia/Taipei'
 });
 
