@@ -663,8 +663,8 @@ app.post('/webhook', express.json(), async (req, res) => {
 // 排程設定
 // ============================================
 
-// 每天 15:20 執行（台灣時間）
-const cronSchedule = process.env.CRON_SCHEDULE || '20 15 * * *';
+// 每天 15:30 執行（台灣時間）- 測試用
+const cronSchedule = process.env.CRON_SCHEDULE || '30 15 * * *';
 console.log(`⏰ 排程設定: ${cronSchedule}`);
 
 cron.schedule(cronSchedule, async () => {
