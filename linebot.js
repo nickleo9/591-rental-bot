@@ -197,7 +197,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&price=${listing.price}`
+                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 15))}`
                     },
                     color: '#27AE60'
                 }
@@ -276,13 +276,14 @@ async function handlePostback(event) {
     if (action === 'interested') {
         const id = data.get('id');
         const price = data.get('price');
+        const title = data.get('title') || ''; // 取得標題 (可能是截斷的)
 
         // 先回覆確認訊息 (讓用戶知道正在處理)
         await client.replyMessage({
             replyToken: event.replyToken,
             messages: [{
                 type: 'text',
-                text: `⏳ 正在為您抓取聯絡資訊，請稍候...`
+                text: `⏳ 正在為您抓取 ${title ? `「${title}...」` : ''} 聯絡資訊，請稍候...`
             }]
         });
 
