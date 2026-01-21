@@ -604,6 +604,19 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
     }
 }
 
+/**
+ * 取得用戶資料
+ */
+async function getUserProfile(userId) {
+    try {
+        const profile = await client.getProfile(userId);
+        return profile;
+    } catch (error) {
+        console.error(`取得用戶資料失敗 (${userId}):`, error.message);
+        return null;
+    }
+}
+
 module.exports = {
     client,
     sendListingsNotification,
