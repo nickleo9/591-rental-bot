@@ -207,71 +207,98 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
  * @param {Array} targets - 搜尋目標陣列
  * @param {number} minRent - 最低租金
  * @param {number} maxRent - 最高租金
+ * @param {boolean} isScheduled - 是否為排程執行（true = 發摘要, false = 發Flex卡片）
  */
-async function runCrawlTaskForUser(userId, targets, minRent, maxRent) {
-    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲`);
+async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isScheduled = false) {
+    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲 (${isScheduled ? '排程模式' : '手動模式'})`);
     console.log(`  目標: ${targets.map(t => t.name).join(', ')}`);
     console.log(`  租金: ${minRent} - ${maxRent}`);
 
     try {
-        // 進度回調
-        const onProgress = async (message) => {
-            try {
-                await lineClient.pushMessage({
-                    to: userId,
-                    messages: [{ type: 'text', text: message }]
-                });
-            } catch (e) {
-                console.error('發送進度通知失敗:', e);
-            }
-        };
-
-        // 執行爬蟲
+        // 執行爬蟲（不傳送進度通知，節省 push 額度）
         const { listings, logs } = await scrape591({
             targets: targets,
             minRent: minRent,
             maxRent: maxRent,
-            maxResults: 20,
-            onProgress
+            maxResults: 20
+            // 移除 onProgress 回調，不再發送進度訊息
         });
 
         // 儲存到 Google Sheets
         const { saved, new: newListings } = await saveListings(listings);
+        const targetNames = targets.map(t => t.name.split('-')[1] || t.name).join('、');
 
-        // 發送通知
-        if (newListings.length > 0) {
-            const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${minRent.toLocaleString()}-${maxRent.toLocaleString()}元)`;
+        if (isScheduled) {
+            // ========== 排程模式：發送單則文字摘要 ==========
+            let summaryText = '';
+            const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+
+            if (newListings.length > 0) {
+                // 有新物件：列出摘要
+                summaryText = `🏠 今日租屋快報 (${today})\n\n`;
+                summaryText += `📊 找到 ${newListings.length} 筆新物件！\n`;
+                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元\n`;
+                summaryText += `📍 地區：${targetNames}\n\n`;
+
+                // 列出前 5 筆標題
+                const preview = newListings.slice(0, 5);
+                summaryText += `📋 物件預覽：\n`;
+                preview.forEach((item, i) => {
+                    const shortTitle = item.title.length > 20 ? item.title.substring(0, 20) + '...' : item.title;
+                    summaryText += `${i + 1}. ${shortTitle} (${item.price.toLocaleString()}元)\n`;
+                });
+
+                if (newListings.length > 5) {
+                    summaryText += `...還有 ${newListings.length - 5} 筆\n`;
+                }
+                summaryText += `\n👉 輸入「搜尋」查看詳細卡片`;
+            } else if (listings.length > 0) {
+                // 無新物件
+                summaryText = `📋 今日租屋快報 (${today})\n\n`;
+                summaryText += `暫無新物件，目前資料庫有 ${listings.length} 筆\n`;
+                summaryText += `📍 地區：${targetNames}\n\n`;
+                summaryText += `👉 輸入「搜尋」查看最新物件`;
+            } else {
+                // 完全沒有物件
+                summaryText = `📭 今日沒有符合條件的物件\n`;
+                summaryText += `📍 地區：${targetNames}\n`;
+                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元`;
+            }
+
+            // 只發送一則摘要訊息
             await lineClient.pushMessage({
                 to: userId,
-                messages: [{ type: 'text', text: message }]
+                messages: [{ type: 'text', text: summaryText }]
             });
-            await sendListingsNotification(userId, newListings);
-        } else if (listings.length > 0) {
-            const targetNames = targets.map(t => t.name.split('-')[1] || t.name).join('、');
-            const message = `📋 沒有新物件，列出資料庫中的 ${Math.min(listings.length, 10)} 間：\n(地區: ${targetNames})`;
-            await lineClient.pushMessage({
-                to: userId,
-                messages: [{ type: 'text', text: message }]
-            });
-            await sendListingsNotification(userId, listings.slice(0, 10));
+
         } else {
-            await lineClient.pushMessage({
-                to: userId,
-                messages: [{ type: 'text', text: '📭 目前沒有符合條件的物件，請稍後再試或調整條件' }]
-            });
+            // ========== 手動模式：發送 Flex 卡片（使用者主動查詢）==========
+            if (newListings.length > 0) {
+                await sendListingsNotification(userId, newListings);
+            } else if (listings.length > 0) {
+                await sendListingsNotification(userId, listings.slice(0, 10));
+            } else {
+                await lineClient.pushMessage({
+                    to: userId,
+                    messages: [{ type: 'text', text: '📭 目前沒有符合條件的物件' }]
+                });
+            }
         }
 
-        console.log(`✅ 用戶 ${userId} 爬蟲完成，找到 ${listings.length} 間物件`);
+        console.log(`✅ 用戶 ${userId} 爬蟲完成，找到 ${listings.length} 間物件 (新: ${newListings.length})`);
 
     } catch (error) {
         console.error(`❌ 用戶 ${userId} 爬蟲失敗:`, error);
-        try {
-            await lineClient.pushMessage({
-                to: userId,
-                messages: [{ type: 'text', text: `⚠️ 搜尋發生錯誤: ${error.message}` }]
-            });
-        } catch (e) {
-            console.error('發送錯誤通知失敗:', e);
+        // 錯誤通知只在手動模式發送，排程模式只記 log 不發 push
+        if (!isScheduled) {
+            try {
+                await lineClient.pushMessage({
+                    to: userId,
+                    messages: [{ type: 'text', text: `⚠️ 搜尋發生錯誤: ${error.message}` }]
+                });
+            } catch (e) {
+                console.error('發送錯誤通知失敗:', e);
+            }
         }
     }
 }
@@ -698,12 +725,13 @@ cron.schedule(cronSchedule, async () => {
                 userTargets = SEARCH_CONFIG.targets;
             }
 
-            // 執行爬蟲
+            // 執行爬蟲（排程模式 = 發摘要）
             await runCrawlTaskForUser(
                 user.userId,
                 userTargets,
                 user.minRent,
-                user.maxRent
+                user.maxRent,
+                true  // isScheduled = true，發送摘要而非 Flex 卡片
             );
 
             // 避免過快請求，休息 5 秒
