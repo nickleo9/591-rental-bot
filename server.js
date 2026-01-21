@@ -609,7 +609,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 
                     if (result && result.action === 'interested') {
                         // 標記為有興趣 (含完整資訊 + userId)
-                        await markAsInterested(
+                        const saveResult = await markAsInterested(
                             result.id,
                             result.price,
                             result.title,
@@ -617,6 +617,25 @@ app.post('/webhook', express.json(), async (req, res) => {
                             result.contactInfo,
                             event.source.userId
                         );
+
+                        // 根據結果發送通知
+                        if (saveResult === 'duplicate') {
+                            await lineClient.pushMessage({
+                                to: event.source.userId,
+                                messages: [{
+                                    type: 'text',
+                                    text: `⚠️ 您已收藏過此物件！\n\n${result.replyContent}`
+                                }]
+                            });
+                        } else {
+                            await lineClient.pushMessage({
+                                to: event.source.userId,
+                                messages: [{
+                                    type: 'text',
+                                    text: `✅ 已加入待看清單！\n\n${result.replyContent}`
+                                }]
+                            });
+                        }
                     }
                     break;
 

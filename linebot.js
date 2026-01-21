@@ -331,13 +331,7 @@ async function handlePostback(event) {
         replyParts.push(`🔗 https://rent.591.com.tw/${id}`);
 
         // 發送詳細訊息 (使用 push 因為 reply token 已用過)
-        await client.pushMessage({
-            to: event.source.userId,
-            messages: [{
-                type: 'text',
-                text: `✅ 已加入待看清單！\n\n${replyParts.join('\n')}`
-            }]
-        });
+        // await client.pushMessage({ ... }); // 移到 server.js 處理，以便判斷是否重複
 
         return {
             action: 'interested',
@@ -346,7 +340,8 @@ async function handlePostback(event) {
             title: contactInfo.title,
             address: contactInfo.address,
             contactInfo,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            replyContent: replyParts.join('\n') // 回傳組合好的訊息內容
         };
     }
 

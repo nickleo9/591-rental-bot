@@ -177,10 +177,9 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
 
     // 檢查是否已經收藏過
     if (userId) {
-        const existingFavorites = await getUserFavorites(userId);
         if (existingFavorites.some(f => f.id === listingId)) {
             console.log(`⚠️ 物件 ${listingId} 已經在用戶 ${userId} 的收藏清單中，跳過重複新增`);
-            return true;
+            return 'duplicate';
         }
     }
 
