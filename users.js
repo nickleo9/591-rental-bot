@@ -143,10 +143,11 @@ async function initSheets() {
 }
 
 /**
- * 確保用戶設定工作表存在
+ * 確保用戶設定工作表存在，且標題列包含 targets 欄位
  */
 async function ensureUserSheet() {
     const sheets = await initSheets();
+    const headers = ['userId', 'displayName', 'region', 'regionCode', 'minRent', 'maxRent', 'keywords', 'subscribed', 'createdAt', 'updatedAt', 'targets'];
 
     try {
         const response = await sheets.spreadsheets.get({
@@ -156,6 +157,7 @@ async function ensureUserSheet() {
         const existingSheets = response.data.sheets.map(s => s.properties.title);
 
         if (!existingSheets.includes(SHEET_NAME)) {
+            // 工作表不存在，建立新的
             await sheets.spreadsheets.batchUpdate({
                 spreadsheetId: SPREADSHEET_ID,
                 requestBody: {
@@ -168,7 +170,6 @@ async function ensureUserSheet() {
             });
 
             // 添加標題列 (11 欄: 含 targets)
-            const headers = ['userId', 'displayName', 'region', 'regionCode', 'minRent', 'maxRent', 'keywords', 'subscribed', 'createdAt', 'updatedAt', 'targets'];
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
                 range: `${SHEET_NAME}!A1:K1`,
@@ -177,9 +178,28 @@ async function ensureUserSheet() {
             });
 
             console.log(`✅ 建立用戶設定工作表`);
+        } else {
+            // 工作表已存在，檢查標題列是否包含 targets
+            const headerResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `${SHEET_NAME}!A1:K1`
+            });
+
+            const currentHeaders = headerResponse.data.values?.[0] || [];
+
+            // 如果標題列少於 11 欄或沒有 targets，則更新標題列
+            if (currentHeaders.length < 11 || !currentHeaders.includes('targets')) {
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${SHEET_NAME}!A1:K1`,
+                    valueInputOption: 'RAW',
+                    requestBody: { values: [headers] }
+                });
+                console.log(`✅ 更新用戶設定工作表標題列 (新增 targets 欄位)`);
+            }
         }
     } catch (error) {
-        console.error('建立用戶表失敗:', error.message);
+        console.error('建立/更新用戶表失敗:', error.message);
     }
 }
 

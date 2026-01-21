@@ -524,6 +524,13 @@ app.post('/webhook', express.json(), async (req, res) => {
 
                             // 讀取用戶設定
                             const user = await getUser(event.source.userId);
+                            console.log('📋 用戶設定:', user ? JSON.stringify({
+                                region: user.region,
+                                minRent: user.minRent,
+                                maxRent: user.maxRent,
+                                targets: user.targets ? '有設定' : '空'
+                            }) : '用戶不存在');
+
                             let userTargets = SEARCH_CONFIG.targets; // 預設
                             let userMinRent = SEARCH_CONFIG.minRent;
                             let userMaxRent = SEARCH_CONFIG.maxRent;
@@ -536,9 +543,12 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 if (user.targets) {
                                     try {
                                         userTargets = JSON.parse(user.targets);
+                                        console.log('✅ 解析 targets 成功:', userTargets);
                                     } catch (e) {
-                                        console.log('解析 targets 失敗，使用預設');
+                                        console.log('❌ 解析 targets 失敗，使用預設:', e.message);
                                     }
+                                } else {
+                                    console.log('⚠️ 用戶 targets 為空，使用預設');
                                 }
                             }
 
