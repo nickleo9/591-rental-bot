@@ -447,8 +447,11 @@ async function getContactInfo(listingId) {
             let line = '';
             let landlordName = '';
 
-            // 電話號碼 (多種可能的選擇器)
+            // 電話號碼 - 591 新版結構: .t5-button span span 或 data-gtm-behavior="call"
             const phoneSelectors = [
+                '.phone button span span',
+                '.t5-button[data-gtm-behavior="call"] span span',
+                '[data-gtm-behavior="call"] span span',
                 '.phone-number',
                 '.landlord-phone',
                 '.contact-phone',
@@ -457,18 +460,22 @@ async function getContactInfo(listingId) {
                 '.info-host-word a[href^="tel:"]'
             ];
             for (const sel of phoneSelectors) {
-                const el = document.querySelector(sel);
-                if (el) {
+                const els = document.querySelectorAll(sel);
+                for (const el of els) {
                     const text = el.textContent?.trim() || el.getAttribute('href')?.replace('tel:', '') || '';
-                    if (text && /\d{4,}/.test(text)) {
+                    // 匹配電話格式 (0xxx-xxx-xxx 或純數字)
+                    if (text && /^0\d{2,3}-?\d{3,4}-?\d{3,4}$/.test(text.replace(/-/g, '').replace(/\s/g, '')) || /^\d{9,10}$/.test(text.replace(/-/g, ''))) {
                         phone = text;
                         break;
                     }
                 }
+                if (phone) break;
             }
 
-            // LINE ID
+            // LINE ID - 591 新版結構: data-gtm-behavior="line_friend"
             const lineSelectors = [
+                '.line-button',
+                '[data-gtm-behavior="line_friend"]',
                 '.line-id',
                 '.contact-line',
                 '[data-line]'
@@ -476,12 +483,17 @@ async function getContactInfo(listingId) {
             for (const sel of lineSelectors) {
                 const el = document.querySelector(sel);
                 if (el) {
-                    line = el.textContent?.trim() || '';
+                    // 如果是 LINE 按鈕，只記錄「有 LINE 聯絡」
+                    if (el.textContent?.includes('LINE聯絡')) {
+                        line = '有LINE聯絡';
+                    } else {
+                        line = el.textContent?.trim() || '';
+                    }
                     break;
                 }
             }
-            // 也檢查頁面文字中是否有 LINE
-            if (!line) {
+            // 也檢查頁面文字中是否有 LINE ID
+            if (!line || line === '有LINE聯絡') {
                 const pageText = document.body.innerText || '';
                 const lineMatch = pageText.match(/LINE\s*[:：]\s*(\S+)/i);
                 if (lineMatch) {
@@ -489,17 +501,26 @@ async function getContactInfo(listingId) {
                 }
             }
 
-            // 房東姓名
-            const nameSelectors = [
-                '.landlord-name',
-                '.host-name',
-                '.info-host-label'
-            ];
-            for (const sel of nameSelectors) {
-                const el = document.querySelector(sel);
-                if (el) {
-                    landlordName = el.textContent?.trim() || '';
-                    break;
+            // 房東/仲介姓名 - 591 新版結構: 包含「仲介:」或「屋主:」的 span
+            const pageText = document.body.innerText || '';
+            const landlordMatch = pageText.match(/(仲介|屋主|房東)\s*[:：]\s*([^\s(<]+)/);
+            if (landlordMatch) {
+                landlordName = landlordMatch[2];
+            }
+            // 備用選擇器
+            if (!landlordName) {
+                const nameSelectors = [
+                    '.landlord-name',
+                    '.host-name',
+                    '.info-host-label',
+                    '.econ-name'
+                ];
+                for (const sel of nameSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        landlordName = el.textContent?.trim().replace(/^(仲介|屋主|房東)\s*[:：]\s*/, '') || '';
+                        if (landlordName) break;
+                    }
                 }
             }
 
