@@ -200,6 +200,81 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
     }
 }
 
+/**
+ * 為單一用戶執行爬蟲任務（使用用戶個人設定）
+ * @param {string} userId - LINE 用戶 ID
+ * @param {Array} targets - 搜尋目標陣列
+ * @param {number} minRent - 最低租金
+ * @param {number} maxRent - 最高租金
+ */
+async function runCrawlTaskForUser(userId, targets, minRent, maxRent) {
+    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲`);
+    console.log(`  目標: ${targets.map(t => t.name).join(', ')}`);
+    console.log(`  租金: ${minRent} - ${maxRent}`);
+
+    try {
+        // 進度回調
+        const onProgress = async (message) => {
+            try {
+                await lineClient.pushMessage({
+                    to: userId,
+                    messages: [{ type: 'text', text: message }]
+                });
+            } catch (e) {
+                console.error('發送進度通知失敗:', e);
+            }
+        };
+
+        // 執行爬蟲
+        const { listings, logs } = await scrape591({
+            targets: targets,
+            minRent: minRent,
+            maxRent: maxRent,
+            maxResults: 20,
+            onProgress
+        });
+
+        // 儲存到 Google Sheets
+        const { saved, new: newListings } = await saveListings(listings);
+
+        // 發送通知
+        if (newListings.length > 0) {
+            const message = `🏠 找到 ${newListings.length} 間新物件！\n(篩選條件: ${minRent.toLocaleString()}-${maxRent.toLocaleString()}元)`;
+            await lineClient.pushMessage({
+                to: userId,
+                messages: [{ type: 'text', text: message }]
+            });
+            await sendListingsNotification(userId, newListings);
+        } else if (listings.length > 0) {
+            const targetNames = targets.map(t => t.name.split('-')[1] || t.name).join('、');
+            const message = `📋 沒有新物件，列出資料庫中的 ${Math.min(listings.length, 10)} 間：\n(地區: ${targetNames})`;
+            await lineClient.pushMessage({
+                to: userId,
+                messages: [{ type: 'text', text: message }]
+            });
+            await sendListingsNotification(userId, listings.slice(0, 10));
+        } else {
+            await lineClient.pushMessage({
+                to: userId,
+                messages: [{ type: 'text', text: '📭 目前沒有符合條件的物件，請稍後再試或調整條件' }]
+            });
+        }
+
+        console.log(`✅ 用戶 ${userId} 爬蟲完成，找到 ${listings.length} 間物件`);
+
+    } catch (error) {
+        console.error(`❌ 用戶 ${userId} 爬蟲失敗:`, error);
+        try {
+            await lineClient.pushMessage({
+                to: userId,
+                messages: [{ type: 'text', text: `⚠️ 搜尋發生錯誤: ${error.message}` }]
+            });
+        } catch (e) {
+            console.error('發送錯誤通知失敗:', e);
+        }
+    }
+}
+
 
 
 // ============================================
@@ -331,15 +406,18 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 await replyText(event.replyToken, '✅ 已清除搜尋關鍵字');
                             }
                         }
-                        // 調整租金
+                        // 調整租金 (儲存到用戶設定)
                         else if (text.startsWith('租金')) {
                             const match = text.match(/(\d+)[^\d]+(\d+)/);
                             if (match) {
                                 const min = parseInt(match[1]);
                                 const max = parseInt(match[2]);
                                 if (min < max && min >= 1000 && max <= 100000) {
-                                    SEARCH_CONFIG.minRent = min;
-                                    SEARCH_CONFIG.maxRent = max;
+                                    // 儲存到用戶個人設定
+                                    await updateUserSettings(event.source.userId, {
+                                        minRent: min,
+                                        maxRent: max
+                                    });
                                     await replyText(event.replyToken,
                                         `✅ 租金範圍已更新！
 
@@ -353,7 +431,7 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 await replyText(event.replyToken, '❌ 格式錯誤\n範例：租金 8000-15000');
                             }
                         }
-                        // 調整地區
+                        // 調整地區 (儲存到用戶設定)
                         else if (text.startsWith('地區')) {
                             const fullArgs = text.replace('地區', '').trim();
 
@@ -361,12 +439,12 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 return replyText(event.replyToken, '❓ 請輸入地區名稱，例如：「地區 中山」、「地區 淡水」或「地區 預設」');
                             }
 
-                            const args = fullArgs.split(/\s+/); // 支援多個地區空格分隔
+                            const args = fullArgs.split(/\s+/);
                             let message = '';
+                            let newTargets = [];
 
                             if (args[0] === '預設') {
-                                // 回復預設
-                                SEARCH_CONFIG.targets = [
+                                newTargets = [
                                     { region: 1, section: 1, name: '台北市-中正區' },
                                     { region: 1, section: 3, name: '台北市-中山區' },
                                     { region: 1, section: 2, name: '台北市-大同區' },
@@ -374,38 +452,28 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 ];
                                 message = '✅ 已恢復【預設監控區域】：中正、中山、大同、永和';
                             } else if (args[0] === '全' || args[0] === '全部') {
-                                // 全區 (台北+新北)
-                                SEARCH_CONFIG.targets = [
+                                newTargets = [
                                     { region: 1, name: '台北市全區' },
                                     { region: 3, name: '新北市全區' }
                                 ];
                                 message = '✅ 已切換為【搜尋全台北 + 全新北】';
                             } else if (args[0] === '台北') {
-                                SEARCH_CONFIG.targets = [
-                                    { region: 1, name: '台北市全區' }
-                                ];
+                                newTargets = [{ region: 1, name: '台北市全區' }];
                                 message = '✅ 已切換為【搜尋全台北市】';
                             } else if (args[0] === '新北') {
-                                SEARCH_CONFIG.targets = [
-                                    { region: 3, name: '新北市全區' }
-                                ];
+                                newTargets = [{ region: 3, name: '新北市全區' }];
                                 message = '✅ 已切換為【搜尋全新北市】';
                             } else {
-                                // 指定特定行政區 (支援多個)
-                                // 先引入 map
+                                // 指定特定行政區
                                 const sectionMap = ScraperConfig.sections;
-                                const newTargets = [];
                                 const unknownArgs = [];
 
                                 for (const arg of args) {
-                                    const cleanArg = arg.replace('區', '') + '區'; // 確保有「區」字
-                                    const cleanArgShort = arg.replace('區', ''); // 確保無「區」字 key check
-
-                                    // 嘗試查找 ID (先查全名，再查簡稱)
+                                    const cleanArg = arg.replace('區', '') + '區';
+                                    const cleanArgShort = arg.replace('區', '');
                                     let sectionId = sectionMap[cleanArg] || sectionMap[cleanArgShort];
 
                                     if (sectionId) {
-                                        // 簡單判斷 region: ID <= 20 為台北(1), > 20 為新北(3)
                                         const regionId = sectionId <= 20 ? 1 : 3;
                                         const regionName = regionId === 1 ? '台北市' : '新北市';
                                         newTargets.push({
@@ -419,7 +487,6 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 }
 
                                 if (newTargets.length > 0) {
-                                    SEARCH_CONFIG.targets = newTargets;
                                     const names = newTargets.map(t => t.name.split('-')[1]).join('、');
                                     message = `✅ 已設定監控區域：${names}`;
                                     if (unknownArgs.length > 0) {
@@ -430,15 +497,47 @@ app.post('/webhook', express.json(), async (req, res) => {
                                 }
                             }
 
-                            console.log('更新監控區域:', SEARCH_CONFIG.targets);
+                            // 儲存到用戶設定 (使用 JSON 字串儲存 targets)
+                            await updateUserSettings(event.source.userId, {
+                                targets: JSON.stringify(newTargets),
+                                region: newTargets[0]?.name || '台北市'
+                            });
+
+                            console.log(`用戶 ${event.source.userId} 更新監控區域:`, newTargets);
                             return replyText(event.replyToken, message);
                         }
-                        // 手動搜尋
+                        // 手動搜尋 (使用用戶個人設定)
                         else if (lowerText.includes('搜尋') || lowerText.includes('找房') || lowerText === '開始') {
-                            // 顯示 Loading 動畫
                             await startLoading(event.source.userId, 40);
-                            await replyText(event.replyToken, '🔍 正在搜尋中，請稍候...');
-                            runCrawlTask(true, event.source.userId);
+
+                            // 讀取用戶設定
+                            const user = await getUser(event.source.userId);
+                            let userTargets = SEARCH_CONFIG.targets; // 預設
+                            let userMinRent = SEARCH_CONFIG.minRent;
+                            let userMaxRent = SEARCH_CONFIG.maxRent;
+
+                            if (user) {
+                                userMinRent = user.minRent || SEARCH_CONFIG.minRent;
+                                userMaxRent = user.maxRent || SEARCH_CONFIG.maxRent;
+
+                                // 嘗試解析 targets JSON
+                                if (user.targets) {
+                                    try {
+                                        userTargets = JSON.parse(user.targets);
+                                    } catch (e) {
+                                        console.log('解析 targets 失敗，使用預設');
+                                    }
+                                }
+                            }
+
+                            const targetNames = userTargets.map(t => t.name.split('-')[1] || t.name).join('、');
+                            await replyText(event.replyToken, `🔍 正在搜尋中...
+
+📍 地區：${targetNames}
+💰 租金：${userMinRent.toLocaleString()} - ${userMaxRent.toLocaleString()} 元`);
+
+                            // 使用用戶設定執行爬蟲
+                            runCrawlTaskForUser(event.source.userId, userTargets, userMinRent, userMaxRent);
                         }
                     }
                     break;

@@ -167,11 +167,11 @@ async function ensureUserSheet() {
                 }
             });
 
-            // 添加標題列
-            const headers = ['userId', 'displayName', 'region', 'regionCode', 'minRent', 'maxRent', 'keywords', 'subscribed', 'createdAt', 'updatedAt'];
+            // 添加標題列 (11 欄: 含 targets)
+            const headers = ['userId', 'displayName', 'region', 'regionCode', 'minRent', 'maxRent', 'keywords', 'subscribed', 'createdAt', 'updatedAt', 'targets'];
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${SHEET_NAME}!A1:J1`,
+                range: `${SHEET_NAME}!A1:K1`,
                 valueInputOption: 'RAW',
                 requestBody: { values: [headers] }
             });
@@ -239,7 +239,7 @@ async function getUser(userId) {
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:J`
+            range: `${SHEET_NAME}!A:K`
         });
 
         const values = response.data.values || [];
@@ -258,7 +258,8 @@ async function getUser(userId) {
             keywords: row[6] || '',
             subscribed: row[7] === 'TRUE',
             createdAt: row[8],
-            updatedAt: row[9]
+            updatedAt: row[9],
+            targets: row[10] || '' // targets JSON 字串
         };
     } catch (error) {
         console.error('取得用戶失敗:', error.message);
@@ -275,7 +276,7 @@ async function updateUserSettings(userId, settings) {
     try {
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A:J`
+            range: `${SHEET_NAME}!A:K`
         });
 
         const values = response.data.values || [];
@@ -300,12 +301,13 @@ async function updateUserSettings(userId, settings) {
             settings.keywords ?? currentRow[6],
             settings.subscribed !== undefined ? (settings.subscribed ? 'TRUE' : 'FALSE') : currentRow[7],
             currentRow[8], // createdAt 不變
-            now // updatedAt 更新
+            now, // updatedAt 更新
+            settings.targets ?? currentRow[10] ?? '' // targets JSON
         ];
 
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEET_NAME}!A${rowIndex + 1}:J${rowIndex + 1}`,
+            range: `${SHEET_NAME}!A${rowIndex + 1}:K${rowIndex + 1}`,
             valueInputOption: 'RAW',
             requestBody: { values: [updatedRow] }
         });
