@@ -463,8 +463,8 @@ async function getContactInfo(listingId) {
                 const els = document.querySelectorAll(sel);
                 for (const el of els) {
                     const text = el.textContent?.trim() || el.getAttribute('href')?.replace('tel:', '') || '';
-                    // 匹配電話格式 (0xxx-xxx-xxx 或純數字)
-                    if (text && /^0\d{2,3}-?\d{3,4}-?\d{3,4}$/.test(text.replace(/-/g, '').replace(/\s/g, '')) || /^\d{9,10}$/.test(text.replace(/-/g, ''))) {
+                    // 匹配電話格式 (包含轉分機)
+                    if (text && /^0\d{2,3}[-\s]?\d{3,4}[-\s]?\d{3,4}(轉\d+)?$/.test(text.replace(/\s/g, ''))) {
                         phone = text;
                         break;
                     }

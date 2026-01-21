@@ -311,16 +311,26 @@ app.post('/webhook', express.json(), async (req, res) => {
         for (const event of events) {
             console.log('📩 收到 LINE 事件:', event.type);
 
-            // 記錄使用者 ID
+            // 記錄使用者 ID 並確保用戶存在於 Sheets
             if (event.source && event.source.userId) {
                 const userId = event.source.userId;
                 if (!subscribedUsers.has(userId)) {
                     subscribedUsers.add(userId);
                     console.log(`👤 新增訂閱用戶: ${userId}`);
 
-                    // 更新 .env 提醒
-                    console.log(`\n⚠️ 請將以下 ID 加入 .env 的 LINE_USER_ID:`);
-                    console.log(`   LINE_USER_ID=${userId}\n`);
+                    // 嘗試取得用戶資料並建立/更新用戶設定
+                    try {
+                        const profile = await getUserProfile(userId);
+                        const displayName = profile?.displayName || '';
+                        const existingUser = await getUser(userId);
+                        if (!existingUser) {
+                            await createUser(userId, displayName);
+                        } else if (!existingUser.displayName && displayName) {
+                            await updateUserSettings(userId, { displayName });
+                        }
+                    } catch (e) {
+                        console.log('取得用戶資料失敗:', e.message);
+                    }
                 }
             }
 
@@ -498,9 +508,11 @@ app.post('/webhook', express.json(), async (req, res) => {
                             }
 
                             // 儲存到用戶設定 (使用 JSON 字串儲存 targets)
+                            // region 欄位儲存簡易顯示名稱
+                            const regionDisplay = newTargets.map(t => t.name.split('-')[1] || t.name).join('、');
                             await updateUserSettings(event.source.userId, {
                                 targets: JSON.stringify(newTargets),
-                                region: newTargets[0]?.name || '台北市'
+                                region: regionDisplay || '台北市'
                             });
 
                             console.log(`用戶 ${event.source.userId} 更新監控區域:`, newTargets);

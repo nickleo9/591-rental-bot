@@ -346,18 +346,24 @@ async function getUserFavorites(userId) {
         // 過濾該用戶的收藏 (userId 在第 K 欄，索引 10)
         const userFavorites = values.slice(1)
             .filter(row => row[10] === userId)
-            .map(row => ({
-                id: row[0],
-                title: row[1] || '',
-                price: parseInt(row[2]) || 0,
-                address: row[3] || '',
-                url: row[4] || `https://rent.591.com.tw/${row[0]}`,
-                landlordName: row[5] || '',
-                phone: row[6] || '',
-                line: row[7] || '',
-                clickTime: row[8] || '',
-                status: row[9] || ''
-            }));
+            .map(row => {
+                // 解析租金 (支援 NT$X,XXX 格式)
+                let priceStr = String(row[2] || '0');
+                let price = parseInt(priceStr.replace(/[NT$,\s]/g, '')) || 0;
+
+                return {
+                    id: row[0],
+                    title: row[1] || '',
+                    price: price,
+                    address: row[3] || '',
+                    url: row[4] || `https://rent.591.com.tw/${row[0]}`,
+                    landlordName: row[5] || '',
+                    phone: row[6] || '',
+                    line: row[7] || '',
+                    clickTime: row[8] || '',
+                    status: row[9] || ''
+                };
+            });
 
         return userFavorites;
     } catch (error) {
