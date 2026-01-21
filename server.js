@@ -62,6 +62,8 @@ const SEARCH_CONFIG = {
     maxRent: parseInt(process.env.MAX_RENT) || 12000
 };
 
+const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec';
+
 // 儲存使用者 ID（第一次發訊息時會記錄）
 let subscribedUsers = new Set();
 // 舊版單用戶邏輯已移除，不再預先載入 LINE_USER_ID
@@ -139,9 +141,6 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
         // 3. 發送通知
         // 決定發送對象
         const targetUsers = (manual && triggeredByUserId) ? [triggeredByUserId] : [...subscribedUsers];
-
-
-        const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbwLBL1wJh_KksDuYCJKnlmrzE2E3OE2mDPxX5vVxRn3TsJNkZnvpmN5a2qcC3QH1REi/exec';
 
         for (const userId of targetUsers) {
             let message = '';
@@ -406,7 +405,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 • 來源: 591 租屋網 (台北/新北)
 • 儲存: 自動整理至系統資料庫
 • 查詢: 輸入「收藏」看你的待看清單
-• 所有物件: https://script.google.com/macros/s/AKfycbxU7rZrSagLxBBPHBIu_r7ac_AelcX7l9u6-FF2T7xewbIlKwsh7A5_HouoVPBC72ms/exec?view=all
+• 所有物件: ${gasWebAppUrl}?view=all
 
 🔎【目前篩選條件】
 • 地區: 中正區、中山區、大同區、永和區 (預設)
