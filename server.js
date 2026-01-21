@@ -244,8 +244,11 @@ async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isSchedule
                 const preview = newListings.slice(0, 5);
                 summaryText += `📋 物件預覽：\n`;
                 preview.forEach((item, i) => {
-                    const shortTitle = item.title.length > 20 ? item.title.substring(0, 20) + '...' : item.title;
-                    summaryText += `${i + 1}. ${shortTitle} (${item.price.toLocaleString()}元)\n`;
+                    const shortTitle = item.title.length > 25 ? item.title.substring(0, 25) + '...' : item.title;
+                    const area = item.area ? `${item.area}坪` : '';
+                    const address = item.address ? item.address.split('區')[1]?.substring(0, 10) || '' : '';
+                    summaryText += `${i + 1}. ${shortTitle}\n`;
+                    summaryText += `   💰${item.price.toLocaleString()}元 ${area ? '📐' + area : ''} ${address ? '📍' + address : ''}\n`;
                 });
 
                 if (newListings.length > 5) {
@@ -388,8 +391,8 @@ app.post('/webhook', express.json(), async (req, res) => {
 
 📌【資料來源與去向】
 • 來源: 591 租屋網 (台北/新北)
-• 儲存: 自動整理至 Google Sheets
-   (連結: https://docs.google.com/spreadsheets/d/14-Mm8kSIHevPCJwI6I8wyWHnc9_gtyu3tqCRvoGtxH0/edit#gid=0)
+• 儲存: 自動整理至系統資料庫
+• 查詢: 輸入「收藏」看你的待看清單
 
 🔎【目前篩選條件】
 • 地區: 中正區、中山區、大同區、永和區 (預設)
