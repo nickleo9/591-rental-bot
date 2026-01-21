@@ -320,16 +320,25 @@ app.post('/webhook', express.json(), async (req, res) => {
 
                     // 嘗試取得用戶資料並建立/更新用戶設定
                     try {
+                        console.log(`🔍 正在嘗試取得用戶 ${userId} 的資料...`);
                         const profile = await getUserProfile(userId);
+                        console.log(`👤 取得用戶資料結果:`, profile ? JSON.stringify(profile) : 'null');
+
                         const displayName = profile?.displayName || '';
                         const existingUser = await getUser(userId);
+
                         if (!existingUser) {
+                            console.log(`🆕 用戶不存在，準備建立新用戶 (名稱: ${displayName})`);
                             await createUser(userId, displayName);
                         } else if (!existingUser.displayName && displayName) {
+                            console.log(`✏️ 用戶已存在但無名稱，準備更新 (名稱: ${displayName})`);
                             await updateUserSettings(userId, { displayName });
+                        } else {
+                            console.log(`✅ 用戶已存在且有名稱 (${existingUser.displayName})，無需更新`);
                         }
                     } catch (e) {
                         console.log('取得用戶資料失敗:', e.message);
+                        console.error(e);
                     }
                 }
             }

@@ -229,12 +229,15 @@ async function createUser(userId, displayName = '') {
         DEFAULT_SETTINGS.keywords,
         'TRUE',
         now,
-        now
+        now,
+        '' // targets 初始為空
     ];
+
+    console.log(`📝 準備寫入新用戶資料:`, JSON.stringify(userData));
 
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEET_NAME}!A:J`,
+        range: `${SHEET_NAME}!A:K`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: [userData] }
@@ -311,6 +314,8 @@ async function updateUserSettings(userId, settings) {
         const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
 
         // 合併現有設定和新設定
+        console.log(`📝 準備更新用戶 ${userId}, 設定:`, JSON.stringify(settings));
+
         const updatedRow = [
             userId,
             settings.displayName ?? currentRow[1],
