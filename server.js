@@ -220,9 +220,11 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
  * @param {number} minRent - 最低租金
  * @param {number} maxRent - 最高租金
  * @param {boolean} isScheduled - 是否為排程執行（true = 發摘要, false = 發Flex卡片）
+ * @param {boolean} shouldPush - 是否推播通知（false = 只爬蟲不推播）
  */
-async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isScheduled = false) {
-    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲 (${isScheduled ? '排程模式' : '手動模式'})`);
+async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isScheduled = false, shouldPush = true) {
+    const mode = !shouldPush ? '靜默模式' : (isScheduled ? '排程模式' : '手動模式');
+    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲 (${mode})`);
     console.log(`  目標: ${targets.map(t => t.name).join(', ')}`);
     console.log(`  租金: ${minRent} - ${maxRent}`);
 
@@ -242,49 +244,55 @@ async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isSchedule
 
         if (isScheduled) {
             // ========== 排程模式：發送單則文字摘要 ==========
-            let summaryText = '';
-            const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+            if (shouldPush) {
+                // 只有 shouldPush = true 時才發送通知
+                let summaryText = '';
+                const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
 
-            if (newListings.length > 0) {
-                // 有新物件：列出摘要
-                summaryText = `🏠 今日租屋快報 (${today})\n\n`;
-                summaryText += `📊 找到 ${newListings.length} 筆新物件！\n`;
-                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元\n`;
-                summaryText += `📍 地區：${targetNames}\n\n`;
+                if (newListings.length > 0) {
+                    // 有新物件：列出摘要
+                    summaryText = `🏠 今日租屋快報 (${today})\n\n`;
+                    summaryText += `📊 找到 ${newListings.length} 筆新物件！\n`;
+                    summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元\n`;
+                    summaryText += `📍 地區：${targetNames}\n\n`;
 
-                // 列出前 5 筆標題
-                const preview = newListings.slice(0, 5);
-                summaryText += `📋 物件預覽：\n`;
-                preview.forEach((item, i) => {
-                    const shortTitle = item.title.length > 25 ? item.title.substring(0, 25) + '...' : item.title;
-                    const area = item.area ? `${item.area}坪` : '';
-                    const address = item.address ? item.address.split('區')[1]?.substring(0, 10) || '' : '';
-                    summaryText += `${i + 1}. ${shortTitle}\n`;
-                    summaryText += `   💰${item.price.toLocaleString()}元 ${area ? '📐' + area : ''} ${address ? '📍' + address : ''}\n`;
-                });
+                    // 列出前 5 筆標題
+                    const preview = newListings.slice(0, 5);
+                    summaryText += `📋 物件預覽：\n`;
+                    preview.forEach((item, i) => {
+                        const shortTitle = item.title.length > 25 ? item.title.substring(0, 25) + '...' : item.title;
+                        const area = item.area ? `${item.area}坪` : '';
+                        const address = item.address ? item.address.split('區')[1]?.substring(0, 10) || '' : '';
+                        summaryText += `${i + 1}. ${shortTitle}\n`;
+                        summaryText += `   💰${item.price.toLocaleString()}元 ${area ? '📐' + area : ''} ${address ? '📍' + address : ''}\n`;
+                    });
 
-                if (newListings.length > 5) {
-                    summaryText += `...還有 ${newListings.length - 5} 筆\n`;
+                    if (newListings.length > 5) {
+                        summaryText += `...還有 ${newListings.length - 5} 筆\n`;
+                    }
+                    summaryText += `\n👉 輸入「搜尋」查看詳細卡片`;
+                } else if (listings.length > 0) {
+                    // 無新物件
+                    summaryText = `📋 今日租屋快報 (${today})\n\n`;
+                    summaryText += `暫無新物件，目前資料庫有 ${listings.length} 筆\n`;
+                    summaryText += `📍 地區：${targetNames}\n\n`;
+                    summaryText += `👉 輸入「搜尋」查看最新物件`;
+                } else {
+                    // 完全沒有物件
+                    summaryText = `📭 今日沒有符合條件的物件\n`;
+                    summaryText += `📍 地區：${targetNames}\n`;
+                    summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元`;
                 }
-                summaryText += `\n👉 輸入「搜尋」查看詳細卡片`;
-            } else if (listings.length > 0) {
-                // 無新物件
-                summaryText = `📋 今日租屋快報 (${today})\n\n`;
-                summaryText += `暫無新物件，目前資料庫有 ${listings.length} 筆\n`;
-                summaryText += `📍 地區：${targetNames}\n\n`;
-                summaryText += `👉 輸入「搜尋」查看最新物件`;
-            } else {
-                // 完全沒有物件
-                summaryText = `📭 今日沒有符合條件的物件\n`;
-                summaryText += `📍 地區：${targetNames}\n`;
-                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元`;
-            }
 
-            // 只發送一則摘要訊息
-            await lineClient.pushMessage({
-                to: userId,
-                messages: [{ type: 'text', text: summaryText }]
-            });
+                // 只發送一則摘要訊息
+                await lineClient.pushMessage({
+                    to: userId,
+                    messages: [{ type: 'text', text: summaryText }]
+                });
+            } else {
+                // 靜默模式：只爬蟲不推播
+                console.log(`✅ 靜默模式：已儲存 ${saved} 筆物件 (新增 ${newListings.length} 筆)，不發送通知`);
+            }
 
         } else {
             // ========== 手動模式：發送 Flex 卡片（使用者主動查詢）==========
@@ -706,12 +714,12 @@ app.post('/webhook', express.json(), async (req, res) => {
 // 排程設定
 // ============================================
 
-// 每天 15:35 執行（台灣時間）- 測試用
+// 每天執行爬蟲（靜默模式：只爬不推播）
 const cronSchedule = process.env.CRON_SCHEDULE || '35 15 * * *';
-console.log(`⏰ 排程設定: ${cronSchedule}`);
+console.log(`⏰ 每日爬蟲排程: ${cronSchedule} (靜默模式：只爬蟲不推播)`);
 
 cron.schedule(cronSchedule, async () => {
-    console.log('⏰ 定時任務觸發 (多用戶模式)');
+    console.log('⏰ 每日定時任務觸發 (靜默模式：只爬蟲不推播)');
 
     if (isCrawling) {
         console.log('⚠️ 上次爬蟲尚未結束，跳過本次排程');
@@ -722,7 +730,7 @@ cron.schedule(cronSchedule, async () => {
 
     try {
         const users = await getAllSubscribedUsers();
-        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行爬蟲...`);
+        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行靜默爬蟲（不推播）...`);
 
         for (const user of users) {
             let userTargets = [];
@@ -741,13 +749,14 @@ cron.schedule(cronSchedule, async () => {
                 userTargets = SEARCH_CONFIG.targets;
             }
 
-            // 執行爬蟲（排程模式 = 發摘要）
+            // 執行爬蟲（排程模式 = 靜默模式，只爬不推播）
             await runCrawlTaskForUser(
                 user.userId,
                 userTargets,
                 user.minRent,
                 user.maxRent,
-                true  // isScheduled = true，發送摘要而非 Flex 卡片
+                true,  // isScheduled = true
+                false  // shouldPush = false，每天只爬蟲不推播，週一才推播
             );
 
             // 避免過快請求，休息 5 秒
@@ -765,9 +774,9 @@ cron.schedule(cronSchedule, async () => {
     timezone: 'Asia/Taipei'
 });
 
-// 每週一排程：發送週報總結
+// 每週一排程：發送週報總結（唯一的推播時間）
 const weeklySchedule = process.env.WEEKLY_SCHEDULE || '0 10 * * 1';
-console.log(`📅 每週報告排程: ${weeklySchedule}`);
+console.log(`📅 每週報告排程: ${weeklySchedule} (每週推播一次)`);
 
 cron.schedule(weeklySchedule, async () => {
     console.log('📅 每週報告任務觸發');
