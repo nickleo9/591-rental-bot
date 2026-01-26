@@ -407,7 +407,15 @@ async function sendWelcomeMessage(userId, displayName = '') {
 • 輸入「租金 XXXX-XXXX」調整租金
 • 輸入「搜尋」立即開始找房！
 
-祝你早日找到理想的房子！🎉`
+祝你早日找到理想的房子！🎉
+
+📬【聯絡資訊】
+Nick Chang｜nickleo051216@gmail.com
+0932-684-051
+🌐 個人網站：https://portaly.cc/zn.studio
+🧵 Threads：https://www.threads.com/@nickai216
+👥 Line 社群：https://reurl.cc/1OZNAY
+💬 Line ： https://lin.ee/Faz0doj`
         }]
     });
 }

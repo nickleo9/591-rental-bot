@@ -467,7 +467,16 @@ app.post('/webhook', express.json(), async (req, res) => {
 • 📗 有興趣: 存入 Sheets 並標記 ⭐
 
 👨‍💻 開發者: Nick
-🔧 系統狀態: 託管於 Render (自動除錯紀錄)`);
+🔧 系統狀態: 託管於 Render (自動除錯紀錄)
+
+📬【聯絡資訊】
+Nick Chang｜nickleo051216@gmail.com
+0932-684-051
+
+🌐 個人網站：ZN Studio｜ (https://portaly.cc/zn.studio)
+🧵 Threads： ZN Studio ( @nickai216 ) (https://www.threads.com/@nickai216)
+👥 Line 社群：https://reurl.cc/1OZNAY
+💬 Line ： https://lin.ee/Faz0doj`);
                         }
                         // 查看設定 (個人化)
                         else if (lowerText === '設定' || lowerText === '狀態' || lowerText === 'status') {

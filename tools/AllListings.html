@@ -8,8 +8,8 @@
     <title>所有物件 - 591 租屋小幫手</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-
     <style>
+        /* 同樣的 CSS 設定 */
         :root {
             --bg-primary: #0f172a;
             --bg-secondary: #1e293b;
@@ -117,7 +117,7 @@
         }
 
         .card-img {
-            height: 120px;
+            height: 160px;
             background: linear-gradient(135deg, var(--accent) 0%, var(--accent-purple) 100%);
             display: flex;
             align-items: center;
@@ -125,6 +125,8 @@
             font-size: 2.5rem;
             color: rgba(255, 255, 255, 0.8);
             position: relative;
+            background-size: cover;
+            background-position: center;
         }
 
         .btn-fav {
@@ -215,7 +217,6 @@
 
         .btn-view:hover {
             opacity: 0.9;
-            color: white;
         }
 
         .loading,
@@ -275,6 +276,10 @@
             border-left: 3px solid #22c55e;
         }
 
+        .toast.success {
+            border-left: 3px solid #22c55e;
+        }
+
         .toast.error {
             border-left: 3px solid #ef4444;
         }
@@ -314,8 +319,35 @@
         <h1><i class="bi bi-building"></i> 所有物件</h1>
         <p>最新爬取的 50 筆資料</p>
     </div>
-
     <div class="filter-bar">
+        <div class="filter-group">
+            <span class="filter-label">地區</span>
+            <select id="region-filter" onchange="applyFilters()">
+                <option value="all">所有地區</option>
+                <option value="台北市">台北市</option>
+                <option value="新北市">新北市</option>
+                <option value="中正區">中正區</option>
+                <option value="中山區">中山區</option>
+                <option value="大同區">大同區</option>
+                <option value="大安區">大安區</option>
+                <option value="信義區">信義區</option>
+                <option value="士林區">士林區</option>
+                <option value="北投區">北投區</option>
+                <option value="萬華區">萬華區</option>
+                <option value="內湖區">內湖區</option>
+                <option value="南港區">南港區</option>
+                <option value="文山區">文山區</option>
+                <option value="松山區">松山區</option>
+                <option value="永和區">永和區</option>
+                <option value="中和區">中和區</option>
+                <option value="板橋區">板橋區</option>
+                <option value="三重區">三重區</option>
+                <option value="新莊區">新莊區</option>
+                <option value="新店區">新店區</option>
+                <option value="淡水區">淡水區</option>
+                <option value="汐止區">汐止區</option>
+            </select>
+        </div>
         <div class="filter-group">
             <span class="filter-label">排序</span>
             <select id="sort-select" onchange="applyFilters()">
@@ -336,22 +368,17 @@
         </div>
         <span class="result-count" id="result-count"></span>
     </div>
-
     <div id="loading" class="loading">
         <div class="spinner"></div>
         <p>正在載入物件...</p>
     </div>
-
     <div id="card-container" class="card-grid"></div>
-
     <div class="toast-container">
         <div id="toast" class="toast"><i class="bi bi-check-circle-fill"></i><span id="toast-msg"></span></div>
     </div>
-
     <script>
         const USER_ID = <?= JSON.stringify(userId) ?>;
         let allData = [];
-
         window.onload = function () {
             google.script.run
                 .withSuccessHandler(function (data) {
@@ -361,7 +388,6 @@
                 .withFailureHandler(showError)
                 .getRentalData('all', USER_ID);
         };
-
         function applyFilters() {
             document.getElementById('loading').style.display = 'none';
             let filtered = [...allData];
@@ -373,6 +399,15 @@
                     return price >= min && price <= max;
                 });
             }
+
+            const regionFilter = document.getElementById('region-filter').value;
+            if (regionFilter !== 'all') {
+                filtered = filtered.filter(item => {
+                    const addr = item.address || item.region || '';
+                    return addr.includes(regionFilter);
+                });
+            }
+
             const sortBy = document.getElementById('sort-select').value;
             if (sortBy === 'price-asc') {
                 filtered.sort((a, b) => (parseInt(String(a.price).replace(/[^\d]/g, '')) || 0) - (parseInt(String(b.price).replace(/[^\d]/g, '')) || 0));
@@ -382,7 +417,6 @@
             document.getElementById('result-count').textContent = `共 ${filtered.length} 筆`;
             renderCards(filtered);
         }
-
         function renderCards(data) {
             const container = document.getElementById('card-container');
             if (!data || data.length === 0) {
@@ -396,13 +430,17 @@
                 const price = String(item.price).replace('NT$', '').trim();
                 const activeClass = item.isFavorite ? 'active' : '';
 
+                // 圖片處理
+                const bgStyle = item.image ? `background-image: url('${item.image}');` : '';
+                const iconContent = item.image ? '' : '<i class="bi bi-house-heart"></i>';
+
                 html += `
           <div class="house-card">
-            <div class="card-img">
+            <div class="card-img" style="${bgStyle}">
               <button class="btn-fav ${activeClass}" onclick="toggleFav(this, ${itemJson})">
                 <i class="bi bi-heart-fill"></i>
               </button>
-              <i class="bi bi-house-heart"></i>
+              ${iconContent}
             </div>
             <div class="card-body">
               <div class="card-title" title="${item.title}">${item.title}</div>
@@ -416,55 +454,32 @@
             });
             container.innerHTML = html;
         }
-
         function toggleFav(btn, item) {
             if (!USER_ID) {
                 showToast('請先從 LINE 開啟才能收藏', 'error');
                 return;
             }
-
             const isAdding = !btn.classList.contains('active');
             const originalClass = btn.className;
-
-            // 樂觀更新 UI
-            if (isAdding) {
-                btn.classList.add('active');
-            } else {
-                btn.classList.remove('active');
-            }
-
+            if (isAdding) { btn.classList.add('active'); } else { btn.classList.remove('active'); }
             if (isAdding) {
                 google.script.run
-                    .withSuccessHandler(function (res) {
-                        if (res.success) showToast(res.message, 'success');
-                        else { showToast('收藏失敗', 'error'); btn.className = originalClass; }
-                    })
-                    .withFailureHandler(function (err) {
-                        showToast('錯誤：' + err.message, 'error');
-                        btn.className = originalClass;
-                    })
+                    .withSuccessHandler(function (res) { if (res.success) showToast(res.message, 'success'); else { showToast('收藏失敗', 'error'); btn.className = originalClass; } })
+                    .withFailureHandler(function (err) { showToast('錯誤：' + err.message, 'error'); btn.className = originalClass; })
                     .addToFavorites(USER_ID, item);
             } else {
                 google.script.run
-                    .withSuccessHandler(function (res) {
-                        if (res.success) showToast(res.message, 'success');
-                        else { showToast('取消收藏失敗', 'error'); btn.className = originalClass; }
-                    })
-                    .withFailureHandler(function (err) {
-                        showToast('錯誤：' + err.message, 'error');
-                        btn.className = originalClass;
-                    })
+                    .withSuccessHandler(function (res) { if (res.success) showToast(res.message, 'success'); else { showToast('取消收藏失敗', 'error'); btn.className = originalClass; } })
+                    .withFailureHandler(function (err) { showToast('錯誤：' + err.message, 'error'); btn.className = originalClass; })
                     .removeFromFavorites(USER_ID, item.id);
             }
         }
-
         function showToast(msg, type) {
             const toast = document.getElementById('toast');
             document.getElementById('toast-msg').textContent = msg;
             toast.className = 'toast show ' + type;
             setTimeout(() => { toast.className = 'toast'; }, 3000);
         }
-
         function showError(error) {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('card-container').innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><i class="bi bi-exclamation-triangle"></i><p>' + error.message + '</p></div>';
