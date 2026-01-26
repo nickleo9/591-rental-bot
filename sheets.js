@@ -77,11 +77,11 @@ async function ensureSheetExists(sheetName) {
                 }
             });
 
-            // 添加標題列
-            const headers = ['ID', '標題', '租金', '地址', '地區', '捷運', '標籤', '連結', '爬取時間', '狀態'];
+            // 添加標題列 (新增「圖片」欄位)
+            const headers = ['ID', '標題', '租金', '地址', '地區', '捷運', '標籤', '連結', '圖片', '爬取時間', '狀態'];
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${sheetName}!A1:J1`,
+                range: `${sheetName}!A1:K1`,
                 valueInputOption: 'RAW',
                 requestBody: { values: [headers] }
             });
@@ -113,23 +113,34 @@ async function saveListings(listings) {
 
     // 準備資料
     const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-    const rows = newListings.map(listing => [
-        listing.id,
-        listing.title,
-        listing.price,
-        listing.address || '',
-        listing.region || '',
-        listing.subway || '',
-        (listing.tags || []).join(', '),
-        listing.url,
-        timestamp,
-        '新發現'
-    ]);
+    const rows = newListings.map(listing => {
+        // 取得第一張圖片
+        let imageUrl = '';
+        if (listing.images && listing.images.length > 0) {
+            imageUrl = listing.images[0];
+        } else if (listing.image) {
+            imageUrl = listing.image;
+        }
+
+        return [
+            listing.id,
+            listing.title,
+            listing.price,
+            listing.address || '',
+            listing.region || '',
+            listing.subway || '',
+            (listing.tags || []).join(', '),
+            listing.url,
+            imageUrl, // 新增圖片欄位
+            timestamp,
+            '新發現'
+        ];
+    });
 
     // 附加到工作表
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.ALL_LISTINGS}!A:J`,
+        range: `${SHEETS.ALL_LISTINGS}!A:K`,
         valueInputOption: 'RAW',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: rows }
@@ -215,7 +226,6 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
     return true;
 }
 
-
 /**
  * 更新物件狀態
  */
@@ -253,9 +263,10 @@ async function getTodayNewListings() {
     const sheets = await initSheets();
 
     try {
+        // 更新讀取範圍到 K
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEETS.ALL_LISTINGS}!A:J`
+            range: `${SHEETS.ALL_LISTINGS}!A:K`
         });
 
         const values = response.data.values || [];
@@ -265,7 +276,7 @@ async function getTodayNewListings() {
 
         // 過濾今日的物件
         const todayListings = values.slice(1).filter(row => {
-            const crawlTime = row[8] || '';
+            const crawlTime = row[9] || ''; // 索引變為 9
             return crawlTime.includes(today);
         });
 
@@ -278,7 +289,8 @@ async function getTodayNewListings() {
             subway: row[5],
             tags: row[6],
             url: row[7],
-            status: row[9]
+            image: row[8], // 新增圖片
+            status: row[10] // 索引變為 10
         }));
     } catch (error) {
         console.error('取得今日物件失敗:', error.message);
@@ -293,9 +305,10 @@ async function getRecentListings(days = 7) {
     const sheets = await initSheets();
 
     try {
+        // 更新讀取範圍到 K
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEETS.ALL_LISTINGS}!A:J`
+            range: `${SHEETS.ALL_LISTINGS}!A:K`
         });
 
         const values = response.data.values || [];
@@ -304,16 +317,14 @@ async function getRecentListings(days = 7) {
         const now = new Date();
         const pastDate = new Date();
         pastDate.setDate(now.getDate() - days);
-        // 設定時間為當天的 00:00:00，確保比較準確
         pastDate.setHours(0, 0, 0, 0);
 
         // 過濾過去 N 天的物件
         const recentListings = values.slice(1).filter(row => {
-            const crawlTimeStr = row[8] || ''; // 格式: "2024/1/26 下午11:45:00"
+            const crawlTimeStr = row[9] || ''; // 索引變為 9
             // 嘗試解析日期
             try {
-                // 處理中文日期格式
-                const datePart = crawlTimeStr.split(' ')[0]; // 取出 "2024/1/26"
+                const datePart = crawlTimeStr.split(' ')[0];
                 const date = new Date(datePart);
                 return date >= pastDate;
             } catch (e) {
@@ -330,8 +341,9 @@ async function getRecentListings(days = 7) {
             subway: row[5],
             tags: row[6],
             url: row[7],
-            crawlTime: row[8],
-            status: row[9]
+            image: row[8], // 新增圖片
+            crawlTime: row[9],
+            status: row[10]
         }));
     } catch (error) {
         console.error(`取得過去 ${days} 天物件失敗:`, error.message);
