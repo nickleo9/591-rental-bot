@@ -237,6 +237,7 @@ async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isSchedule
 
                 // 從 Sheets 取得過去 7 天的物件
                 const recentListings = await getRecentListings(7);
+                const totalSystemCount = recentListings.length; // 系統總掃描量
 
                 // 過濾符合用戶條件的物件 (因為 Sheets 存的是所有人的，需再次篩選)
                 // 1. 租金範圍
@@ -253,7 +254,16 @@ async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isSchedule
                     return priceOk && regionOk;
                 });
 
-                await sendWeeklyReport(userId, userFilteredListings);
+                // 準備 Context 資訊
+                const userRegionDisplay = targets.map(t => t.name.split('-')[1] || t.name).join('、');
+                const context = {
+                    totalScanned: totalSystemCount,
+                    userRegion: userRegionDisplay,
+                    userMinRent: minRent,
+                    userMaxRent: maxRent
+                };
+
+                await sendWeeklyReport(userId, userFilteredListings, context);
 
             } else {
                 // 平日 (週二至週日)：靜默爬取，不發送通知

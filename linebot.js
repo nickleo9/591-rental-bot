@@ -610,15 +610,23 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
  * @param {string} userId - LINE 用戶 ID
  * @param {Array} listings - 過去一週的物件列表
  */
-async function sendWeeklyReport(userId, listings) {
+async function sendWeeklyReport(userId, listings, context = {}) {
     const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+    const { totalScanned = 0, userRegion = '', userMinRent = 0, userMaxRent = 0 } = context;
 
     if (!listings || listings.length === 0) {
+        let msg = `📊 [週報] ${today}\n\n`;
+        msg += `本週系統共掃描 ${totalScanned.toLocaleString()} 筆物件，但沒有發現符合您條件的新物件。\n\n`;
+        msg += `🔍 您的篩選條件：\n`;
+        msg += `• 地區：${userRegion || '未設定'}\n`;
+        msg += `• 租金：${userMinRent.toLocaleString()} - ${userMaxRent.toLocaleString()} 元\n\n`;
+        msg += `💡 建議：試著放寬租金範圍或增加搜尋地區，可能會發現更多好房喔！`;
+
         await client.pushMessage({
             to: userId,
             messages: [{
                 type: 'text',
-                text: `📊 [週報] ${today}\n\n本週沒有發現符合條件的新物件。`
+                text: msg
             }]
         });
         return;
@@ -644,7 +652,7 @@ async function sendWeeklyReport(userId, listings) {
 
     const summaryText = `📊 [每週租屋週報] ${today}
     
-📅 過去 7 天共發現 ${listings.length} 間新物件！
+📅 本週系統共掃描 ${totalScanned.toLocaleString()} 筆物件，為您精選 ${listings.length} 間符合條件的好房！
 
 💰 租金行情：
 最低：${minPrice.toLocaleString()} 元
@@ -652,6 +660,7 @@ async function sendWeeklyReport(userId, listings) {
 平均：${avgPrice.toLocaleString()} 元
 
 📍 熱門區域：${topRegions}
+(您的條件: ${userRegion}, $${userMinRent}-$${userMaxRent})
 
 ⬇️ 精選物件推薦 (前 10 筆)`;
 
