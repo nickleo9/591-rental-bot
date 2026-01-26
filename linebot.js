@@ -55,12 +55,19 @@ function formatListing(listing, index) {
         ? listing.title.substring(0, 25) + '...'
         : listing.title;
 
+    // 確保 URL 有效
+    const validUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) ? url : 'https://rent.591.com.tw';
+    const listingUrl = validUrl(listing.url);
+
     // 處理圖片 URL (取第一張有效圖片)
     const allImages = listing.images || (listing.image ? [listing.image] : []);
     let heroImage = null;
 
     for (const url of allImages) {
-        if (!url || url.includes('data:') || url.length < 10) continue;
+        if (!url || url.length < 10) continue;
+        // 排除 data: URI (LINE 不支援) 和 SVG (通常是 placeholder)
+        if (url.startsWith('data:') || url.includes('.svg') || url.includes('post-loading')) continue;
+
         let processedUrl = url;
         if (processedUrl.startsWith('http://')) {
             processedUrl = processedUrl.replace('http://', 'https://');
@@ -85,7 +92,7 @@ function formatListing(listing, index) {
                 aspectMode: 'cover',
                 action: {
                     type: 'uri',
-                    uri: listing.url
+                    uri: listingUrl
                 }
             }
         }),
@@ -177,7 +184,6 @@ function formatListing(listing, index) {
         footer: {
             type: 'box',
             layout: 'horizontal',
-            spacing: 'sm',
             contents: [
                 {
                     type: 'button',
@@ -186,7 +192,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'uri',
                         label: '查看',
-                        uri: listing.url
+                        uri: listingUrl
                     },
                     color: '#3498DB'
                 },
@@ -197,7 +203,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 15))}`
+                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 10))}`
                     },
                     color: '#27AE60'
                 }
@@ -224,12 +230,21 @@ async function sendListingsNotification(userId, listings) {
         return;
     }
 
+    // 提取物件的區域資訊 (從 listings 中統計)
+    const regions = [...new Set(listings.map(l => {
+        // region 格式通常為 "台北市-中正區" 或 "中正區"
+        const parts = (l.region || '').split('-');
+        return parts.length > 1 ? parts[1] : l.region;
+    }))].filter(r => r).join('、');
+
+    const displayRegion = regions || '台北市、新北市';
+
     // 發送摘要訊息
     await client.pushMessage({
         to: userId,
         messages: [{
             type: 'text',
-            text: `🏠 找到 ${listings.length} 間符合條件的房屋！\n\n條件：租金 8,000-12,000 元、近捷運、可開伙、乾濕分離\n地區：台北市、新北市\n\n⬇️ 滑動查看詳情`
+            text: `🏠 找到 ${listings.length} 間符合條件的房屋！\n\n條件：租金 8,000-12,000 元、近捷運、可開伙、乾濕分離\n地區：${displayRegion}\n\n⬇️ 滑動查看詳情`
         }]
     });
 
@@ -573,9 +588,9 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
         }
     }));
 
-    const gasUrl = gasWebAppUrl
-        ? `${gasWebAppUrl}?userId=${userId}&view=favorites`
-        : `https://script.google.com/macros/s/AKfycbyjwWMVrHYEbkRvcrNmiPNayyDIMLW_708iTNVMBIh7YTIYKFdLb_hqszkzF8xzuISh/exec?userId=${userId}&view=favorites`;
+    const gasUrl = process.env.APPS_SCRIPT_URL
+        ? `${process.env.APPS_SCRIPT_URL}?userId=${userId}&view=favorites`
+        : '(請設定 APPS_SCRIPT_URL 環境變數)';
 
     const summaryMessage = {
         type: 'text',
@@ -605,6 +620,103 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
 }
 
 /**
+ * 發送週報 (Weekly Report)
+ * @param {string} userId - LINE 用戶 ID
+ * @param {Array} listings - 過去一週的物件列表
+ */
+async function sendWeeklyReport(userId, listings, context = {}) {
+    const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+    const { totalScanned = 0, userRegion = '', userMinRent = 0, userMaxRent = 0 } = context;
+
+    if (!listings || listings.length === 0) {
+        let msg = `📊 [週報] ${today}\n\n`;
+        msg += `本週系統共掃描 ${totalScanned.toLocaleString()} 筆物件，但沒有發現符合您條件的新物件。\n\n`;
+        msg += `🔍 您的篩選條件：\n`;
+        msg += `• 地區：${userRegion || '未設定'}\n`;
+        msg += `• 租金：${userMinRent.toLocaleString()} - ${userMaxRent.toLocaleString()} 元\n\n`;
+        msg += `💡 建議：試著放寬租金範圍或增加搜尋地區，可能會發現更多好房喔！`;
+
+        await client.pushMessage({
+            to: userId,
+            messages: [{
+                type: 'text',
+                text: msg
+            }]
+        });
+        return;
+    }
+
+    // 1. 發送文字統計摘要
+    const prices = listings.map(l => l.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const avgPrice = Math.floor(prices.reduce((a, b) => a + b, 0) / listings.length);
+
+    // 統計地區分佈
+    const regions = {};
+    listings.forEach(l => {
+        const area = l.region ? l.region.split('-')[1] || l.region : '其他';
+        regions[area] = (regions[area] || 0) + 1;
+    });
+    const topRegions = Object.entries(regions)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([r, c]) => `${r}(${c})`)
+        .join('、');
+
+    const summaryText = `📊 [每週租屋週報] ${today}
+    
+📅 本週系統共掃描 ${totalScanned.toLocaleString()} 筆物件，為您精選 ${listings.length} 間符合條件的好房！
+
+💰 租金行情：
+最低：${minPrice.toLocaleString()} 元
+最高：${maxPrice.toLocaleString()} 元
+平均：${avgPrice.toLocaleString()} 元
+
+📍 熱門區域：${topRegions}
+(您的條件: ${userRegion}, $${userMinRent}-$${userMaxRent})
+
+⬇️ 精選物件推薦 (前 10 筆)`;
+
+    await client.pushMessage({
+        to: userId,
+        messages: [{
+            type: 'text',
+            text: summaryText
+        }]
+    });
+
+    // 2. 發送精選物件卡片 (取前 12 筆，避免卡片太多)
+    // 排序邏輯：優先顯示有圖片且價格較低的
+    const sortedListings = [...listings].sort((a, b) => {
+        // 先比是否有圖 (假設 url 長度判斷圖)
+        const aHasImg = a.image || (a.images && a.images.length > 0);
+        const bHasImg = b.image || (b.images && b.images.length > 0);
+        if (aHasImg && !bHasImg) return -1;
+        if (!aHasImg && bHasImg) return 1;
+        // 再比價格
+        return a.price - b.price;
+    });
+
+    const topListings = sortedListings.slice(0, 12);
+    const bubbles = topListings.map((listing, index) => formatListing(listing, index));
+
+    await client.pushMessage({
+        to: userId,
+        messages: [{
+            type: 'flex',
+            altText: `本週精選 ${topListings.length} 間房屋`,
+            contents: {
+                type: 'carousel',
+                contents: bubbles
+            }
+        }]
+    });
+
+    console.log(`✅ 已發送週報給用戶 ${userId} (共 ${listings.length} 筆)`);
+}
+
+/**
  * 取得用戶資料
  */
 async function getUserProfile(userId) {
@@ -627,5 +739,6 @@ module.exports = {
     sendWelcomeMessage,
     sendUserSettings,
     sendMyFavorites,
+    sendWeeklyReport,
     config
 };

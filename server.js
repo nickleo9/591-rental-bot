@@ -23,7 +23,8 @@ const {
     sendWelcomeMessage,
     sendUserSettings,
     sendMyFavorites,
-    getUserProfile
+    getUserProfile,
+    sendWeeklyReport
 } = require('./linebot');
 const {
     saveListings,
@@ -31,7 +32,8 @@ const {
     initSheets,
     recordPushedListings,
     getPushedListingIds,
-    getUserFavorites
+    getUserFavorites,
+    getRecentListings
 } = require('./sheets');
 const {
     createUser,
@@ -62,7 +64,7 @@ const SEARCH_CONFIG = {
     maxRent: parseInt(process.env.MAX_RENT) || 12000
 };
 
-const gasWebAppUrl = 'https://script.google.com/macros/s/AKfycbyjwWMVrHYEbkRvcrNmiPNayyDIMLW_708iTNVMBIh7YTIYKFdLb_hqszkzF8xzuISh/exec';
+
 
 // 儲存使用者 ID（第一次發訊息時會記錄）
 let subscribedUsers = new Set();
@@ -82,6 +84,31 @@ async function replyText(replyToken, text) {
         replyToken,
         messages: [{ type: 'text', text }]
     });
+}
+
+// 指定特定回應設定
+const CUSTOM_RESPONSES = {
+    '房東電話': '請點擊物件下方的「有興趣」按鈕，系統會自動抓取並回傳房東電話給您！',
+    '如何使用': '輸入「指令」查看完整教學，或者直接告訴我你想找哪裡的房子 (例如：台北市 大安區)。',
+    '收費': '目前本服務完全免費！歡迎多多使用。',
+    '聯絡作者': '本機器人由 591 租屋小幫手團隊開發，如有問題請寄信至 support@example.com'
+};
+
+/**
+ * 處理自定義關鍵字回應
+ */
+async function handleCustomResponse(event) {
+    const text = event.message.text.trim();
+    const replyText = CUSTOM_RESPONSES[text];
+
+    if (replyText) {
+        await lineClient.replyMessage({
+            replyToken: event.replyToken,
+            messages: [{ type: 'text', text: replyText }]
+        });
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -163,7 +190,7 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
                 }
 
                 message += `👀 查看完整清單 (含篩選/排序)：\n`;
-                message += `${gasWebAppUrl}?userId=${userId}\n`;
+                message += `${process.env.APPS_SCRIPT_URL}?userId=${userId}\n`;
 
                 await lineClient.pushMessage({ to: userId, messages: [{ type: 'text', text: message }] });
                 console.log(`✅ 已發送通知給用戶 ${userId}`);
@@ -219,75 +246,74 @@ async function runCrawlTask(manual = false, triggeredByUserId = null) {
  * @param {Array} targets - 搜尋目標陣列
  * @param {number} minRent - 最低租金
  * @param {number} maxRent - 最高租金
- * @param {boolean} isScheduled - 是否為排程執行（true = 發摘要, false = 發Flex卡片）
+ * @param {boolean} isScheduled - 是否為排程執行
+ * @param {boolean} isWeeklyReport - 是否為週報模式 (每週一)
  */
-async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isScheduled = false) {
-    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲 (${isScheduled ? '排程模式' : '手動模式'})`);
+async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isScheduled = false, isWeeklyReport = false) {
+    console.log(`[${new Date().toLocaleString()}] 為用戶 ${userId} 執行爬蟲 (${isScheduled ? '排程模式' : '手動模式'}, 週報: ${isWeeklyReport})`);
     console.log(`  目標: ${targets.map(t => t.name).join(', ')}`);
     console.log(`  租金: ${minRent} - ${maxRent}`);
 
     try {
-        // 執行爬蟲（不傳送進度通知，節省 push 額度）
-        const { listings, logs } = await scrape591({
+        // 執行爬蟲（不傳送進度通知）
+        const { listings } = await scrape591({
             targets: targets,
             minRent: minRent,
             maxRent: maxRent,
             maxResults: 20
-            // 移除 onProgress 回調，不再發送進度訊息
         });
 
         // 儲存到 Google Sheets
-        const { saved, new: newListings } = await saveListings(listings);
-        const targetNames = targets.map(t => t.name.split('-')[1] || t.name).join('、');
+        const { new: newListings } = await saveListings(listings);
 
         if (isScheduled) {
-            // ========== 排程模式：發送單則文字摘要 ==========
-            let summaryText = '';
-            const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+            // ========== 排程模式 ==========
+            if (isWeeklyReport) {
+                // 每週一：發送週報 (蒐集過去 7 天資料)
+                console.log(`📅 準備發送週報給用戶 ${userId}...`);
 
-            if (newListings.length > 0) {
-                // 有新物件：列出摘要
-                summaryText = `🏠 今日租屋快報 (${today})\n\n`;
-                summaryText += `📊 找到 ${newListings.length} 筆新物件！\n`;
-                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元\n`;
-                summaryText += `📍 地區：${targetNames}\n\n`;
+                // 從 Sheets 取得過去 7 天的物件
+                const recentListings = await getRecentListings(7);
+                const totalSystemCount = recentListings.length; // 系統總掃描量
 
-                // 列出前 5 筆標題
-                const preview = newListings.slice(0, 5);
-                summaryText += `📋 物件預覽：\n`;
-                preview.forEach((item, i) => {
-                    const shortTitle = item.title.length > 25 ? item.title.substring(0, 25) + '...' : item.title;
-                    const area = item.area ? `${item.area}坪` : '';
-                    const address = item.address ? item.address.split('區')[1]?.substring(0, 10) || '' : '';
-                    summaryText += `${i + 1}. ${shortTitle}\n`;
-                    summaryText += `   💰${item.price.toLocaleString()}元 ${area ? '📐' + area : ''} ${address ? '📍' + address : ''}\n`;
+                // 過濾符合用戶條件的物件 (因為 Sheets 存的是所有人的，需再次篩選)
+                // 1. 租金範圍
+                // 2. 地區 (比對 region 欄位)
+                // 3. 排除已推播過的 (可選，週報通常可以重複顯示精選)
+
+                const userFilteredListings = recentListings.filter(l => {
+                    const priceOk = l.price >= minRent && l.price <= maxRent;
+                    // 地區篩選 (簡易字串比對)
+                    const regionOk = targets.some(t => {
+                        const targetName = t.name.split('-')[1] || t.name;
+                        return l.address.includes(targetName) || l.region.includes(targetName);
+                    });
+                    return priceOk && regionOk;
                 });
 
-                if (newListings.length > 5) {
-                    summaryText += `...還有 ${newListings.length - 5} 筆\n`;
-                }
-                summaryText += `\n👉 輸入「搜尋」查看詳細卡片`;
-            } else if (listings.length > 0) {
-                // 無新物件
-                summaryText = `📋 今日租屋快報 (${today})\n\n`;
-                summaryText += `暫無新物件，目前資料庫有 ${listings.length} 筆\n`;
-                summaryText += `📍 地區：${targetNames}\n\n`;
-                summaryText += `👉 輸入「搜尋」查看最新物件`;
+                // 準備 Context 資訊
+                const userRegionDisplay = targets.map(t => t.name.split('-')[1] || t.name).join('、');
+                const context = {
+                    totalScanned: totalSystemCount,
+                    userRegion: userRegionDisplay,
+                    userMinRent: minRent,
+                    userMaxRent: maxRent
+                };
+
+                await sendWeeklyReport(userId, userFilteredListings, context);
+
             } else {
-                // 完全沒有物件
-                summaryText = `📭 今日沒有符合條件的物件\n`;
-                summaryText += `📍 地區：${targetNames}\n`;
-                summaryText += `💰 租金：${minRent.toLocaleString()}~${maxRent.toLocaleString()} 元`;
+                // 平日 (週二至週日)：靜默爬取，不發送通知
+                console.log(`🤫 平日靜默爬取完成 (新物件: ${newListings.length})，不發送通知`);
+
+                // 僅在有新物件時 Log 一下
+                if (newListings.length > 0) {
+                    console.log(`   (已儲存 ${newListings.length} 筆新資料到 Sheets)`);
+                }
             }
 
-            // 只發送一則摘要訊息
-            await lineClient.pushMessage({
-                to: userId,
-                messages: [{ type: 'text', text: summaryText }]
-            });
-
         } else {
-            // ========== 手動模式：發送 Flex 卡片（使用者主動查詢）==========
+            // ========== 手動模式：發送 Flex 卡片 ==========
             if (newListings.length > 0) {
                 await sendListingsNotification(userId, newListings);
             } else if (listings.length > 0) {
@@ -300,11 +326,10 @@ async function runCrawlTaskForUser(userId, targets, minRent, maxRent, isSchedule
             }
         }
 
-        console.log(`✅ 用戶 ${userId} 爬蟲完成，找到 ${listings.length} 間物件 (新: ${newListings.length})`);
+        console.log(`✅ 用戶 ${userId} 爬蟲完成`);
 
     } catch (error) {
         console.error(`❌ 用戶 ${userId} 爬蟲失敗:`, error);
-        // 錯誤通知只在手動模式發送，排程模式只記 log 不發 push
         if (!isScheduled) {
             try {
                 await lineClient.pushMessage({
@@ -393,6 +418,11 @@ app.post('/webhook', express.json(), async (req, res) => {
                 case 'message':
                     // 收到文字訊息
                     if (event.message.type === 'text') {
+                        // 先檢查是否為自定義特定回應
+                        if (await handleCustomResponse(event)) {
+                            break;
+                        }
+
                         const text = event.message.text.trim();
                         const lowerText = text.toLowerCase();
 
@@ -405,7 +435,7 @@ app.post('/webhook', express.json(), async (req, res) => {
 • 來源: 591 租屋網 (台北/新北)
 • 儲存: 自動整理至系統資料庫
 • 查詢: 輸入「收藏」看你的待看清單
-• 所有物件: ${gasWebAppUrl}?view=all
+• 所有物件: ${process.env.APPS_SCRIPT_URL || '(未設定 GAS 連結)'}
 
 🔎【目前篩選條件】
 • 地區: 中正區、中山區、大同區、永和區 (預設)
@@ -645,6 +675,36 @@ app.post('/webhook', express.json(), async (req, res) => {
                             // 使用用戶設定執行爬蟲
                             runCrawlTaskForUser(event.source.userId, userTargets, userMinRent, userMaxRent);
                         }
+                        // 測試週報 (手動觸發)
+                        else if (text === '測試週報') {
+                            await replyText(event.replyToken, '📊 正在為您生成即時週報，請稍候...');
+
+                            // 讀取用戶設定
+                            const user = await getUser(event.source.userId);
+                            let userTargets = SEARCH_CONFIG.targets;
+                            let userMinRent = SEARCH_CONFIG.minRent;
+                            let userMaxRent = SEARCH_CONFIG.maxRent;
+
+                            if (user) {
+                                userMinRent = user.minRent || SEARCH_CONFIG.minRent;
+                                userMaxRent = user.maxRent || SEARCH_CONFIG.maxRent;
+                                if (user.targets) {
+                                    try {
+                                        userTargets = JSON.parse(user.targets);
+                                    } catch (e) { console.error(e); }
+                                }
+                            }
+
+                            // 強制執行週報邏輯
+                            runCrawlTaskForUser(
+                                event.source.userId,
+                                userTargets,
+                                userMinRent,
+                                userMaxRent,
+                                true, // isScheduled (進入排程邏輯區塊)
+                                true  // isWeeklyReport (強制發送週報)
+                            );
+                        }
                     }
                     break;
 
@@ -706,12 +766,12 @@ app.post('/webhook', express.json(), async (req, res) => {
 // 排程設定
 // ============================================
 
-// 每天 15:35 執行（台灣時間）- 測試用
-const cronSchedule = process.env.CRON_SCHEDULE || '35 15 * * *';
-console.log(`⏰ 排程設定: ${cronSchedule}`);
+// 1. 每日排程 (負責爬取資料，平日不發通知)
+const dailySchedule = process.env.CRON_SCHEDULE || '0 11 * * *';
+console.log(`⏰ 每日爬蟲排程: ${dailySchedule}`);
 
-cron.schedule(cronSchedule, async () => {
-    console.log('⏰ 定時任務觸發 (多用戶模式)');
+cron.schedule(dailySchedule, async () => {
+    console.log('⏰ [每日排程] 觸發靜默爬蟲...');
 
     if (isCrawling) {
         console.log('⚠️ 上次爬蟲尚未結束，跳過本次排程');
@@ -722,48 +782,86 @@ cron.schedule(cronSchedule, async () => {
 
     try {
         const users = await getAllSubscribedUsers();
-        console.log(`📋 共有 ${users.length} 位訂閱用戶，開始逐一執行爬蟲...`);
+
+        // 檢查是否有獨立的週報排程
+        // 如果有設定 WEEKLY_SCHEDULE，則每日排程永遠保持靜默 (isWeeklyReport = false)
+        // 週報將由另一個 Cron Job 處理
+        const hasSeparateWeeklySchedule = !!process.env.WEEKLY_SCHEDULE;
+
+        // 如果沒有獨立排程設定，則維持舊邏輯：週一由每日排程代發週報
+        const today = new Date();
+        const isMonday = today.getDay() === 1;
+        const isWeeklyReport = !hasSeparateWeeklySchedule && isMonday;
 
         for (const user of users) {
             let userTargets = [];
-
-            // 解析 targets
             if (user.targets) {
                 try {
                     userTargets = JSON.parse(user.targets);
-                } catch (e) {
-                    console.error(`解析用戶 ${user.userId} targets 失敗:`, e);
-                }
+                } catch (e) { console.error(e); }
             }
+            if (!userTargets || userTargets.length === 0) userTargets = SEARCH_CONFIG.targets;
 
-            // 如果沒有 targets，使用預設值
-            if (!userTargets || userTargets.length === 0) {
-                userTargets = SEARCH_CONFIG.targets;
-            }
-
-            // 執行爬蟲（排程模式 = 發摘要）
             await runCrawlTaskForUser(
-                user.userId,
-                userTargets,
-                user.minRent,
-                user.maxRent,
-                true  // isScheduled = true，發送摘要而非 Flex 卡片
+                user.userId, userTargets, user.minRent, user.maxRent,
+                true,           // isScheduled
+                isWeeklyReport  // 是否發送週報
             );
-
-            // 避免過快請求，休息 5 秒
             await new Promise(resolve => setTimeout(resolve, 5000));
         }
-
-        console.log('🎉 所有用戶爬蟲任務執行完畢');
-
     } catch (error) {
-        console.error('排程執行錯誤:', error);
+        console.error('每日排程錯誤:', error);
     } finally {
         isCrawling = false;
     }
-}, {
-    timezone: 'Asia/Taipei'
-});
+}, { timezone: 'Asia/Taipei' });
+
+
+// 2. 週報排程 (若有設定 WEEKLY_SCHEDULE)
+if (process.env.WEEKLY_SCHEDULE) {
+    const weeklySchedule = process.env.WEEKLY_SCHEDULE;
+    console.log(`⏰ 週報專屬排程: ${weeklySchedule}`);
+
+    cron.schedule(weeklySchedule, async () => {
+        console.log('⏰ [週報排程] 觸發週報發送...');
+
+        // 注意：週報排程也執行爬蟲，確保資料最新，並且強制 isWeeklyReport = true
+        if (isCrawling) {
+            console.log('⚠️ 系統忙碌中 (爬蟲執行中)，稍後重試週報...');
+            // 簡單的重試邏輯或直接跳過，這裡選擇跳過避免衝突
+            return;
+        }
+
+        isCrawling = true;
+
+        try {
+            const users = await getAllSubscribedUsers();
+            console.log(`📋 開始為 ${users.length} 位用戶生成週報...`);
+
+            for (const user of users) {
+                let userTargets = [];
+                if (user.targets) {
+                    try {
+                        userTargets = JSON.parse(user.targets);
+                    } catch (e) { console.error(e); }
+                }
+                if (!userTargets || userTargets.length === 0) userTargets = SEARCH_CONFIG.targets;
+
+                await runCrawlTaskForUser(
+                    user.userId, userTargets, user.minRent, user.maxRent,
+                    true, // isScheduled
+                    true  // isWeeklyReport (強制發週報)
+                );
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        } catch (error) {
+            console.error('週報排程錯誤:', error);
+        } finally {
+            isCrawling = false;
+        }
+
+    }, { timezone: 'Asia/Taipei' });
+}
 
 // 每週一排程：發送週報總結
 const weeklySchedule = process.env.WEEKLY_SCHEDULE || '0 10 * * 1';
@@ -866,7 +964,10 @@ async function start() {
             console.log(`📡 伺服器: http://localhost:${PORT}`);
             console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);
             console.log(`📡 手動爬取: http://localhost:${PORT}/crawl`);
-            console.log(`⏰ 定時排程: ${cronSchedule}`);
+            console.log(`⏰ 每日爬蟲排程: ${dailySchedule}`);
+            if (process.env.WEEKLY_SCHEDULE) {
+                console.log(`⏰ 週報專屬排程: ${process.env.WEEKLY_SCHEDULE}`);
+            }
             console.log(`🕒 伺服器時間: ${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`);
             console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.targets.map(t => t.name).join('、')}`);
             console.log(`💰 租金範圍: ${SEARCH_CONFIG.minRent} - ${SEARCH_CONFIG.maxRent} 元`);
