@@ -237,11 +237,27 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
             }
         }
 
-        // 添加到「有興趣」工作表 (11 欄完整資訊)
-        // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
+        // 查找圖片 URL (從主表)
+        let imageUrl = '';
+        try {
+            const listResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId: SPREADSHEET_ID,
+                range: `${SHEETS.ALL_LISTINGS}!A:I` // I 欄為圖片
+            });
+            const rows = listResponse.data.values || [];
+            const match = rows.find(r => r[0] === listingId);
+            if (match && match[8]) {
+                imageUrl = match[8];
+            }
+        } catch (e) {
+            console.error('查找圖片失敗:', e.message);
+        }
+
+        // 添加到「有興趣」工作表 (包含圖片連結，共 12 欄)
+        // 欄位: ID(0), 標題(1), 租金(2), 地址(3), 連結(4), 聯絡人(5), 電話(6), LINE(7), 點擊時間(8), 狀態(9), userId(10), 圖片(11)
         await sheets.spreadsheets.values.append({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEETS.INTERESTED}!A:K`,
+            range: `${SHEETS.INTERESTED}!A:L`,
             valueInputOption: 'RAW',
             insertDataOption: 'INSERT_ROWS',
             requestBody: {
@@ -256,7 +272,8 @@ async function markAsInterested(listingId, price, title = '', address = '', cont
                     line,
                     timestamp,
                     '待聯繫',
-                    userId
+                    userId,
+                    imageUrl // 新增圖片欄位 (Col 12)
                 ]]
             }
         });
