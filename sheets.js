@@ -280,18 +280,24 @@ async function getTodayNewListings() {
             return crawlTime.includes(today);
         });
 
-        return todayListings.map(row => ({
-            id: row[0],
-            title: row[1],
-            price: parseInt(row[2]) || 0,
-            address: row[3],
-            region: row[4],
-            subway: row[5],
-            tags: row[6],
-            url: row[7],
-            image: row[8], // 新增圖片
-            status: row[10] // 索引變為 10
-        }));
+        return todayListings.map(row => {
+            // 解析租金 (支援 NT$X,XXX 格式)
+            let priceStr = String(row[2] || '0');
+            let price = parseInt(priceStr.replace(/[^\d]/g, '')) || 0;
+
+            return {
+                id: row[0],
+                title: row[1],
+                price: price,
+                address: row[3],
+                region: row[4],
+                subway: row[5],
+                tags: row[6],
+                url: row[7],
+                image: row[8], // 新增圖片
+                status: row[10] // 索引變為 10
+            };
+        });
     } catch (error) {
         console.error('取得今日物件失敗:', error.message);
         return [];
@@ -332,19 +338,25 @@ async function getRecentListings(days = 7) {
             }
         });
 
-        return recentListings.map(row => ({
-            id: row[0],
-            title: row[1],
-            price: parseInt(row[2]) || 0,
-            address: row[3],
-            region: row[4],
-            subway: row[5],
-            tags: row[6],
-            url: row[7],
-            image: row[8], // 新增圖片
-            crawlTime: row[9],
-            status: row[10]
-        }));
+        return recentListings.map(row => {
+            // 解析租金 (支援 NT$X,XXX 格式)
+            let priceStr = String(row[2] || '0');
+            let price = parseInt(priceStr.replace(/[^\d]/g, '')) || 0;
+
+            return {
+                id: row[0],
+                title: row[1],
+                price: price,
+                address: row[3],
+                region: row[4],
+                subway: row[5],
+                tags: row[6],
+                url: row[7],
+                image: row[8], // 新增圖片
+                crawlTime: row[9],
+                status: row[10]
+            };
+        });
     } catch (error) {
         console.error(`取得過去 ${days} 天物件失敗:`, error.message);
         return [];
