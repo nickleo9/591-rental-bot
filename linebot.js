@@ -64,7 +64,10 @@ function formatListing(listing, index) {
     let heroImage = null;
 
     for (const url of allImages) {
-        if (!url || url.includes('data:') || url.length < 10) continue;
+        if (!url || url.length < 10) continue;
+        // 排除 data: URI (LINE 不支援) 和 SVG (通常是 placeholder)
+        if (url.startsWith('data:') || url.includes('.svg') || url.includes('post-loading')) continue;
+
         let processedUrl = url;
         if (processedUrl.startsWith('http://')) {
             processedUrl = processedUrl.replace('http://', 'https://');
