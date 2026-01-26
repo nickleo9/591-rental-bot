@@ -55,6 +55,10 @@ function formatListing(listing, index) {
         ? listing.title.substring(0, 25) + '...'
         : listing.title;
 
+    // 確保 URL 有效
+    const validUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) ? url : 'https://rent.591.com.tw';
+    const listingUrl = validUrl(listing.url);
+
     // 處理圖片 URL (取第一張有效圖片)
     const allImages = listing.images || (listing.image ? [listing.image] : []);
     let heroImage = null;
@@ -85,7 +89,7 @@ function formatListing(listing, index) {
                 aspectMode: 'cover',
                 action: {
                     type: 'uri',
-                    uri: listing.url
+                    uri: listingUrl
                 }
             }
         }),
@@ -177,7 +181,6 @@ function formatListing(listing, index) {
         footer: {
             type: 'box',
             layout: 'horizontal',
-            spacing: 'sm',
             contents: [
                 {
                     type: 'button',
@@ -186,7 +189,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'uri',
                         label: '查看',
-                        uri: listing.url
+                        uri: listingUrl
                     },
                     color: '#3498DB'
                 },
@@ -197,7 +200,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 15))}`
+                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 10))}`
                     },
                     color: '#27AE60'
                 }
@@ -603,6 +606,94 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
 }
 
 /**
+ * 發送週報 (Weekly Report)
+ * @param {string} userId - LINE 用戶 ID
+ * @param {Array} listings - 過去一週的物件列表
+ */
+async function sendWeeklyReport(userId, listings) {
+    const today = new Date().toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' });
+
+    if (!listings || listings.length === 0) {
+        await client.pushMessage({
+            to: userId,
+            messages: [{
+                type: 'text',
+                text: `📊 [週報] ${today}\n\n本週沒有發現符合條件的新物件。`
+            }]
+        });
+        return;
+    }
+
+    // 1. 發送文字統計摘要
+    const prices = listings.map(l => l.price);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const avgPrice = Math.floor(prices.reduce((a, b) => a + b, 0) / listings.length);
+
+    // 統計地區分佈
+    const regions = {};
+    listings.forEach(l => {
+        const area = l.region ? l.region.split('-')[1] || l.region : '其他';
+        regions[area] = (regions[area] || 0) + 1;
+    });
+    const topRegions = Object.entries(regions)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([r, c]) => `${r}(${c})`)
+        .join('、');
+
+    const summaryText = `📊 [每週租屋週報] ${today}
+    
+📅 過去 7 天共發現 ${listings.length} 間新物件！
+
+💰 租金行情：
+最低：${minPrice.toLocaleString()} 元
+最高：${maxPrice.toLocaleString()} 元
+平均：${avgPrice.toLocaleString()} 元
+
+📍 熱門區域：${topRegions}
+
+⬇️ 精選物件推薦 (前 10 筆)`;
+
+    await client.pushMessage({
+        to: userId,
+        messages: [{
+            type: 'text',
+            text: summaryText
+        }]
+    });
+
+    // 2. 發送精選物件卡片 (取前 12 筆，避免卡片太多)
+    // 排序邏輯：優先顯示有圖片且價格較低的
+    const sortedListings = [...listings].sort((a, b) => {
+        // 先比是否有圖 (假設 url 長度判斷圖)
+        const aHasImg = a.image || (a.images && a.images.length > 0);
+        const bHasImg = b.image || (b.images && b.images.length > 0);
+        if (aHasImg && !bHasImg) return -1;
+        if (!aHasImg && bHasImg) return 1;
+        // 再比價格
+        return a.price - b.price;
+    });
+
+    const topListings = sortedListings.slice(0, 12);
+    const bubbles = topListings.map((listing, index) => formatListing(listing, index));
+
+    await client.pushMessage({
+        to: userId,
+        messages: [{
+            type: 'flex',
+            altText: `本週精選 ${topListings.length} 間房屋`,
+            contents: {
+                type: 'carousel',
+                contents: bubbles
+            }
+        }]
+    });
+
+    console.log(`✅ 已發送週報給用戶 ${userId} (共 ${listings.length} 筆)`);
+}
+
+/**
  * 取得用戶資料
  */
 async function getUserProfile(userId) {
@@ -625,5 +716,6 @@ module.exports = {
     sendWelcomeMessage,
     sendUserSettings,
     sendMyFavorites,
+    sendWeeklyReport,
     config
 };

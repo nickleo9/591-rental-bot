@@ -287,6 +287,59 @@ async function getTodayNewListings() {
 }
 
 /**
+ * 取得過去 N 天的物件
+ */
+async function getRecentListings(days = 7) {
+    const sheets = await initSheets();
+
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEETS.ALL_LISTINGS}!A:J`
+        });
+
+        const values = response.data.values || [];
+        if (values.length <= 1) return [];
+
+        const now = new Date();
+        const pastDate = new Date();
+        pastDate.setDate(now.getDate() - days);
+        // 設定時間為當天的 00:00:00，確保比較準確
+        pastDate.setHours(0, 0, 0, 0);
+
+        // 過濾過去 N 天的物件
+        const recentListings = values.slice(1).filter(row => {
+            const crawlTimeStr = row[8] || ''; // 格式: "2024/1/26 下午11:45:00"
+            // 嘗試解析日期
+            try {
+                // 處理中文日期格式
+                const datePart = crawlTimeStr.split(' ')[0]; // 取出 "2024/1/26"
+                const date = new Date(datePart);
+                return date >= pastDate;
+            } catch (e) {
+                return false;
+            }
+        });
+
+        return recentListings.map(row => ({
+            id: row[0],
+            title: row[1],
+            price: parseInt(row[2]) || 0,
+            address: row[3],
+            region: row[4],
+            subway: row[5],
+            tags: row[6],
+            url: row[7],
+            crawlTime: row[8],
+            status: row[9]
+        }));
+    } catch (error) {
+        console.error(`取得過去 ${days} 天物件失敗:`, error.message);
+        return [];
+    }
+}
+
+/**
  * 記錄已推播的物件 (避免重複推播)
  * 工作表結構: userId, listingId, pushedAt
  */
@@ -387,6 +440,7 @@ module.exports = {
     markAsInterested,
     updateListingStatus,
     getTodayNewListings,
+    getRecentListings,
     getExistingIds,
     recordPushedListings,
     getPushedListingIds,
