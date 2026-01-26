@@ -589,7 +589,7 @@ async function sendMyFavorites(userId, favorites, replyToken = null) {
     }));
 
     const gasUrl = process.env.APPS_SCRIPT_URL
-        ? `${process.env.APPS_SCRIPT_URL}?userId=${userId}`
+        ? `${process.env.APPS_SCRIPT_URL}?userId=${userId}&view=favorites`
         : '(請設定 APPS_SCRIPT_URL 環境變數)';
 
     const summaryMessage = {
