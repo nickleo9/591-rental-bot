@@ -798,7 +798,10 @@ async function start() {
             console.log(`📡 伺服器: http://localhost:${PORT}`);
             console.log(`📡 Webhook: http://localhost:${PORT}/webhook`);
             console.log(`📡 手動爬取: http://localhost:${PORT}/crawl`);
-            console.log(`⏰ 定時排程: ${cronSchedule}`);
+            console.log(`⏰ 每日爬蟲排程: ${dailySchedule}`);
+            if (process.env.WEEKLY_SCHEDULE) {
+                console.log(`⏰ 週報專屬排程: ${process.env.WEEKLY_SCHEDULE}`);
+            }
             console.log(`🕒 伺服器時間: ${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`);
             console.log(`🏙️ 搜尋地區: ${SEARCH_CONFIG.targets.map(t => t.name).join('、')}`);
             console.log(`💰 租金範圍: ${SEARCH_CONFIG.minRent} - ${SEARCH_CONFIG.maxRent} 元`);
