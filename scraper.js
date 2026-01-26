@@ -5,6 +5,12 @@
 
 const { chromium } = require('playwright');
 const { execSync } = require('child_process');
+const pLimit = require('p-limit');
+
+// 限制並發數 (避免 Render 記憶體爆掉)
+// Free Tier 建議設定為 1，付費版可設為 2-3 (現在設定為 1 為了穩定，若 Render 有 1G RAM 可改為 2)
+// 為了避免 10+ 人同時排隊太久，這裡嘗試設為 1，但優化 scrape591 流程
+const limit = pLimit(1);
 
 // 確保 Playwright 瀏覽器已安裝
 async function ensureBrowserInstalled() {
@@ -288,7 +294,10 @@ async function getListingDetails(page, url) {
 /**
  * 主要爬蟲函數
  */
-async function scrape591(options = {}) {
+/**
+ * 實際執行爬蟲的核心函數 (不直接導出)
+ */
+async function scrape591Core(options = {}) {
     const {
         targets = [
             { region: 1, section: 1, name: '台北市-中正區' },
@@ -299,19 +308,16 @@ async function scrape591(options = {}) {
         minRent = 8000,
         maxRent = 12000,
         maxResults = 20,
-        onProgress = null // 新增回調函數
+        onProgress = null
     } = options;
 
     console.log('🚀 開始爬取 591 租屋網...');
+    // ... (rest of the function is the same, just renamed) ...
+    // Since I cannot match the whole function body easily to rename it, 
+    // I will use a wrapper approach where I change the export and the function name in one go if possible,
+    // OR I just change the function definition line and the export line.
+
     if (onProgress) onProgress('🚀 爬蟲啟動中...');
-
-    // ... (intermediate code preserved, skipping to loop) ...
-    // Note: I cannot skip lines in replace_file_content easily without context matching. 
-    // I will target the function start and the loop separately if needed.
-    // Actually, I'll rewrite the start and then the loop.
-
-    // ... 
-    // Let's do the start first.
 
     console.log(`📊 條件: 租金 ${minRent}-${maxRent} 元`);
     console.log(`📍 目標區域: ${targets.map(t => t.name).join(', ')}`);
@@ -387,7 +393,6 @@ async function scrape591(options = {}) {
             allListings = allListings.slice(0, maxResults);
         }
 
-        // ... existing code ...
         console.log(`\n✅ 總共找到 ${allListings.length} 間符合條件的物件`);
 
         executionLogs.push(`✅ 總共找到 ${allListings.length} 間符合條件的物件`);
@@ -401,6 +406,11 @@ async function scrape591(options = {}) {
 
     return { listings: allListings, logs: executionLogs };
 }
+
+/**
+ * 導出被併發限制保護的爬蟲函數
+ */
+const scrape591 = (options) => limit(() => scrape591Core(options));
 
 /**
  * 取得物件聯絡資訊

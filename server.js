@@ -84,6 +84,31 @@ async function replyText(replyToken, text) {
     });
 }
 
+// 指定特定回應設定
+const CUSTOM_RESPONSES = {
+    '房東電話': '請點擊物件下方的「有興趣」按鈕，系統會自動抓取並回傳房東電話給您！',
+    '如何使用': '輸入「指令」查看完整教學，或者直接告訴我你想找哪裡的房子 (例如：台北市 大安區)。',
+    '收費': '目前本服務完全免費！歡迎多多使用。',
+    '聯絡作者': '本機器人由 591 租屋小幫手團隊開發，如有問題請寄信至 support@example.com'
+};
+
+/**
+ * 處理自定義關鍵字回應
+ */
+async function handleCustomResponse(event) {
+    const text = event.message.text.trim();
+    const replyText = CUSTOM_RESPONSES[text];
+
+    if (replyText) {
+        await lineClient.replyMessage({
+            replyToken: event.replyToken,
+            messages: [{ type: 'text', text: replyText }]
+        });
+        return true;
+    }
+    return false;
+}
+
 /**
  * 執行爬蟲任務
  * @param {boolean} manual - 是否為手動觸發
@@ -381,6 +406,11 @@ app.post('/webhook', express.json(), async (req, res) => {
                 case 'message':
                     // 收到文字訊息
                     if (event.message.type === 'text') {
+                        // 先檢查是否為自定義特定回應
+                        if (await handleCustomResponse(event)) {
+                            break;
+                        }
+
                         const text = event.message.text.trim();
                         const lowerText = text.toLowerCase();
 

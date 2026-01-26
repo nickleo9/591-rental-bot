@@ -4,8 +4,40 @@
  */
 
 const { google } = require('googleapis');
+const fs = require('fs');
+
+// 簡單的互斥鎖 (確保 Sheets 寫入不衝突)
+class Mutex {
+    constructor() {
+        this._queue = [];
+        this._locked = false;
+    }
+
+    lock() {
+        return new Promise((resolve) => {
+            if (this._locked) {
+                this._queue.push(resolve);
+            } else {
+                this._locked = true;
+                resolve();
+            }
+        });
+    }
+
+    release() {
+        if (this._queue.length > 0) {
+            const resolve = this._queue.shift();
+            resolve();
+        } else {
+            this._locked = false;
+        }
+    }
+}
+
+const sheetMutex = new Mutex();
 
 // Google Sheets 設定
+const CREDENTIALS_PATH = './credentials.json';
 const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_ID;
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
@@ -94,60 +126,67 @@ async function ensureSheetExists(sheetName) {
 }
 
 /**
- * 儲存物件列表到 Sheets
+ * 儲存物件列表到 Sheets (Thread-Safe)
  */
 async function saveListings(listings) {
-    const sheets = await initSheets();
-    await ensureSheetExists(SHEETS.ALL_LISTINGS);
+    await sheetMutex.lock(); // 加鎖
 
-    // 先取得已存在的 ID
-    const existingIds = await getExistingIds();
+    try {
+        const sheets = await initSheets();
+        await ensureSheetExists(SHEETS.ALL_LISTINGS);
 
-    // 過濾出新物件
-    const newListings = listings.filter(l => !existingIds.has(l.id));
+        // 先取得已存在的 ID
+        const existingIds = await getExistingIds();
 
-    if (newListings.length === 0) {
-        console.log('📭 沒有新物件需要儲存');
-        return { saved: 0, new: [] };
-    }
+        // 過濾出新物件
+        const newListings = listings.filter(l => !existingIds.has(l.id));
 
-    // 準備資料
-    const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-    const rows = newListings.map(listing => {
-        // 取得第一張圖片
-        let imageUrl = '';
-        if (listing.images && listing.images.length > 0) {
-            imageUrl = listing.images[0];
-        } else if (listing.image) {
-            imageUrl = listing.image;
+        if (newListings.length === 0) {
+            console.log('📭 沒有新物件需要儲存');
+            return { saved: 0, new: [] };
         }
 
-        return [
-            listing.id,
-            listing.title,
-            listing.price,
-            listing.address || '',
-            listing.region || '',
-            listing.subway || '',
-            (listing.tags || []).join(', '),
-            listing.url,
-            imageUrl, // 新增圖片欄位
-            timestamp,
-            '新發現'
-        ];
-    });
+        // 準備資料
+        const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+        const rows = newListings.map(listing => {
+            // 取得第一張圖片
+            let imageUrl = '';
+            if (listing.images && listing.images.length > 0) {
+                imageUrl = listing.images[0];
+            } else if (listing.image) {
+                imageUrl = listing.image;
+            }
 
-    // 附加到工作表
-    await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.ALL_LISTINGS}!A:K`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: { values: rows }
-    });
+            return [
+                listing.id,
+                listing.title,
+                listing.price,
+                listing.address || '',
+                listing.region || '',
+                listing.subway || '',
+                (listing.tags || []).join(', '),
+                listing.url,
+                imageUrl, // 新增圖片欄位
+                timestamp,
+                '新發現'
+            ];
+        });
 
-    console.log(`✅ 儲存了 ${newListings.length} 間新物件`);
-    return { saved: newListings.length, new: newListings };
+        // 附加到工作表
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEETS.ALL_LISTINGS}!A:K`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: { values: rows }
+        });
+
+        console.log(`✅ 儲存了 ${newListings.length} 間新物件`);
+        return { saved: newListings.length, new: newListings };
+
+    } finally {
+        sheetMutex.release(); // 解鎖
+    }
 }
 
 /**
@@ -180,79 +219,109 @@ async function getExistingIds() {
  * @param {string} userId - LINE 用戶 ID
  */
 async function markAsInterested(listingId, price, title = '', address = '', contactInfo = {}, userId = '') {
-    const sheets = await initSheets();
-    await ensureSheetExists(SHEETS.INTERESTED);
+    await sheetMutex.lock(); // 加鎖
 
-    const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-    const { phone = '', line = '', landlordName = '' } = contactInfo;
+    try {
+        const sheets = await initSheets();
+        await ensureSheetExists(SHEETS.INTERESTED);
 
-    // 檢查是否已經收藏過
-    if (userId) {
-        const existingFavorites = await getUserFavorites(userId);
-        if (existingFavorites.some(f => f.id === listingId)) {
-            console.log(`⚠️ 物件 ${listingId} 已經在用戶 ${userId} 的收藏清單中，跳過重複新增`);
-            return 'duplicate';
+        const timestamp = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+        const { phone = '', line = '', landlordName = '' } = contactInfo;
+
+        // 檢查是否已經收藏過
+        if (userId) {
+            const existingFavorites = await getUserFavorites(userId);
+            if (existingFavorites.some(f => f.id === listingId)) {
+                console.log(`⚠️ 物件 ${listingId} 已經在用戶 ${userId} 的收藏清單中，跳過重複新增`);
+                return 'duplicate';
+            }
         }
+
+        // 添加到「有興趣」工作表 (11 欄完整資訊)
+        // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: SPREADSHEET_ID,
+            range: `${SHEETS.INTERESTED}!A:K`,
+            valueInputOption: 'RAW',
+            insertDataOption: 'INSERT_ROWS',
+            requestBody: {
+                values: [[
+                    listingId,
+                    title,
+                    price,
+                    address,
+                    `https://rent.591.com.tw/${listingId}`,
+                    landlordName,
+                    phone,
+                    line,
+                    timestamp,
+                    '待聯繫',
+                    userId
+                ]]
+            }
+        });
+
+        // 更新主工作表的狀態
+        // Note: calling another locked function from within a lock might cause deadlock if not careful.
+        // But here I'm calling updateListingStatus which I will fix.
+        // Wait! updateListingStatus ALSO locks. DEADLOCK RISK!
+        // Solution: Split logic or make locks reentrant? 
+        // My simple Mutex is NOT reentrant.
+        // I should inline the update logic OR make a private internal update function without lock.
+        // Or simple unlock before calling update? No, that breaks atomicity.
+        // Best approach: create a private `_updateListingStatus` without lock, and `updateListingStatus` with lock calling it.
+        // For now, to avoid complexity, I will just inline the update logic here or NOT lock the updateListingStatus call since we are holding the lock? 
+        // No, `updateListingStatus` is called from OUTSIDE too.
+        // So I must separate `_updateStatus` (internal) and `updateListingStatus` (public).
+
+        // I'll implement `_updateListingStatusNoLock` and use it.
+
+        await _updateListingStatusNoLock(sheets, listingId, '有興趣 ⭐');
+
+        console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(用戶: ${userId}, 標題: ${title})`);
+        return true;
+    } finally {
+        sheetMutex.release();
     }
-
-    // 添加到「有興趣」工作表 (11 欄完整資訊)
-    // 欄位: ID, 標題, 租金, 地址, 連結, 聯絡人, 電話, LINE, 點擊時間, 狀態, userId
-    await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `${SHEETS.INTERESTED}!A:K`,
-        valueInputOption: 'RAW',
-        insertDataOption: 'INSERT_ROWS',
-        requestBody: {
-            values: [[
-                listingId,
-                title,
-                price,
-                address,
-                `https://rent.591.com.tw/${listingId}`,
-                landlordName,
-                phone,
-                line,
-                timestamp,
-                '待聯繫',
-                userId
-            ]]
-        }
-    });
-
-    // 更新主工作表的狀態
-    await updateListingStatus(listingId, '有興趣 ⭐');
-
-    console.log(`⭐ 標記物件 ${listingId} 為「有興趣」(用戶: ${userId}, 標題: ${title})`);
-    return true;
 }
 
 /**
- * 更新物件狀態
+ * 內部更新狀態 (不加鎖，供內部調用)
  */
-async function updateListingStatus(listingId, status) {
-    const sheets = await initSheets();
-
+async function _updateListingStatusNoLock(sheets, listingId, status) {
     try {
-        // 查找物件所在的行
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: SPREADSHEET_ID,
-            range: `${SHEETS.ALL_LISTINGS}!A:J`
+            range: `${SHEETS.ALL_LISTINGS}!A:A` // 只要取 ID
         });
 
         const values = response.data.values || [];
         const rowIndex = values.findIndex(row => row[0] === listingId);
 
         if (rowIndex > 0) {
-            // 更新狀態欄（第 J 欄，索引 9）
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_ID,
-                range: `${SHEETS.ALL_LISTINGS}!J${rowIndex + 1}`,
+                range: `${SHEETS.ALL_LISTINGS}!K${rowIndex + 1}`, // K 欄是狀態
                 valueInputOption: 'RAW',
                 requestBody: { values: [[status]] }
             });
         }
     } catch (error) {
         console.error('更新狀態失敗:', error.message);
+    }
+}
+
+
+/**
+ * 更新物件狀態
+ */
+async function updateListingStatus(listingId, status) {
+    await sheetMutex.lock();
+    try {
+        const sheets = await initSheets();
+        await _updateListingStatusNoLock(sheets, listingId, status);
+    } finally {
+        sheetMutex.release();
     }
 }
 
