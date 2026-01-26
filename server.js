@@ -633,6 +633,36 @@ app.post('/webhook', express.json(), async (req, res) => {
                             // 使用用戶設定執行爬蟲
                             runCrawlTaskForUser(event.source.userId, userTargets, userMinRent, userMaxRent);
                         }
+                        // 測試週報 (手動觸發)
+                        else if (text === '測試週報') {
+                            await replyText(event.replyToken, '📊 正在為您生成即時週報，請稍候...');
+
+                            // 讀取用戶設定
+                            const user = await getUser(event.source.userId);
+                            let userTargets = SEARCH_CONFIG.targets;
+                            let userMinRent = SEARCH_CONFIG.minRent;
+                            let userMaxRent = SEARCH_CONFIG.maxRent;
+
+                            if (user) {
+                                userMinRent = user.minRent || SEARCH_CONFIG.minRent;
+                                userMaxRent = user.maxRent || SEARCH_CONFIG.maxRent;
+                                if (user.targets) {
+                                    try {
+                                        userTargets = JSON.parse(user.targets);
+                                    } catch (e) { console.error(e); }
+                                }
+                            }
+
+                            // 強制執行週報邏輯
+                            runCrawlTaskForUser(
+                                event.source.userId,
+                                userTargets,
+                                userMinRent,
+                                userMaxRent,
+                                true, // isScheduled (進入排程邏輯區塊)
+                                true  // isWeeklyReport (強制發送週報)
+                            );
+                        }
                     }
                     break;
 
