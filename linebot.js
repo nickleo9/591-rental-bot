@@ -230,12 +230,21 @@ async function sendListingsNotification(userId, listings) {
         return;
     }
 
+    // 提取物件的區域資訊 (從 listings 中統計)
+    const regions = [...new Set(listings.map(l => {
+        // region 格式通常為 "台北市-中正區" 或 "中正區"
+        const parts = (l.region || '').split('-');
+        return parts.length > 1 ? parts[1] : l.region;
+    }))].filter(r => r).join('、');
+
+    const displayRegion = regions || '台北市、新北市';
+
     // 發送摘要訊息
     await client.pushMessage({
         to: userId,
         messages: [{
             type: 'text',
-            text: `🏠 找到 ${listings.length} 間符合條件的房屋！\n\n條件：租金 8,000-12,000 元、近捷運、可開伙、乾濕分離\n地區：台北市、新北市\n\n⬇️ 滑動查看詳情`
+            text: `🏠 找到 ${listings.length} 間符合條件的房屋！\n\n條件：租金 8,000-12,000 元、近捷運、可開伙、乾濕分離\n地區：${displayRegion}\n\n⬇️ 滑動查看詳情`
         }]
     });
 
