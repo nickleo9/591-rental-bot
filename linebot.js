@@ -21,6 +21,16 @@ function sanitizeText(text) {
         .replace(/[\u200B-\u200D\uFEFF]/g, '')
         // 移除其他可能導致問題的特殊字符
         .replace(/[\uFFF0-\uFFFF]/g, '')
+        // 移除私有區域字符 (Private Use Area)
+        .replace(/[\uE000-\uF8FF]/g, '')
+        // 移除代理對範圍內的孤立字符 (可能導致問題)
+        .replace(/[\uD800-\uDFFF]/g, '')
+        // 移除其他特殊格式字符
+        .replace(/[\u2028\u2029]/g, '')
+        // 移除組合用標記 (可能導致渲染問題)
+        .replace(/[\u0300-\u036F]/g, '')
+        // 移除不間斷空格等特殊空白
+        .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, ' ')
         // 將多個空白壓縮成一個
         .replace(/\s+/g, ' ')
         // 去除頭尾空白
