@@ -4,6 +4,28 @@
  */
 
 const { Client, messagingApi, middleware } = require('@line/bot-sdk');
+
+/**
+ * 清理文字中的無效字符
+ * LINE Flex Message 不支援某些特殊字符，需要過濾
+ * @param {string} text - 要清理的文字
+ * @returns {string} - 清理後的文字
+ */
+function sanitizeText(text) {
+    if (!text || typeof text !== 'string') return '';
+
+    return text
+        // 移除控制字符 (除了常見的空白字符 \t \n \r)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        // 移除零寬字符
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        // 移除其他可能導致問題的特殊字符
+        .replace(/[\uFFF0-\uFFFF]/g, '')
+        // 將多個空白壓縮成一個
+        .replace(/\s+/g, ' ')
+        // 去除頭尾空白
+        .trim();
+}
 const { getContactInfo } = require('./scraper');
 
 // LINE Bot 設定
@@ -50,10 +72,11 @@ async function startLoading(userId, seconds = 20) {
  */
 function formatListing(listing, index) {
     const priceFormatted = listing.price.toLocaleString();
-    // 截短標題 (避免過長)
-    const shortTitle = listing.title.length > 25
-        ? listing.title.substring(0, 25) + '...'
-        : listing.title;
+    // 清理並截短標題 (避免過長與無效字符)
+    const cleanTitle = sanitizeText(listing.title) || '未知標題';
+    const shortTitle = cleanTitle.length > 25
+        ? cleanTitle.substring(0, 25) + '...'
+        : cleanTitle;
 
     // 確保 URL 有效
     const validUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) ? url : 'https://rent.591.com.tw';
@@ -147,7 +170,7 @@ function formatListing(listing, index) {
                         },
                         {
                             type: 'text',
-                            text: listing.address || listing.region || '未知',
+                            text: sanitizeText(listing.address || listing.region) || '未知',
                             size: 'sm',
                             color: '#666666',
                             margin: 'sm',
@@ -169,7 +192,7 @@ function formatListing(listing, index) {
                         },
                         {
                             type: 'text',
-                            text: listing.subway || '近捷運',
+                            text: sanitizeText(listing.subway) || '近捷運',
                             size: 'sm',
                             color: '#666666',
                             margin: 'sm',
@@ -203,7 +226,7 @@ function formatListing(listing, index) {
                     action: {
                         type: 'postback',
                         label: '有興趣👍',
-                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(listing.title.substring(0, 10))}`
+                        data: `action=interested&id=${listing.id}&price=${listing.price}&title=${encodeURIComponent(cleanTitle.substring(0, 10))}`
                     },
                     color: '#27AE60'
                 }
@@ -235,7 +258,7 @@ async function sendListingsNotification(userId, listings) {
         // region 格式通常為 "台北市-中正區" 或 "中正區"
         const parts = (l.region || '').split('-');
         return parts.length > 1 ? parts[1] : l.region;
-    }))].filter(r => r).join('、');
+    }))].filter(r => r).map(r => sanitizeText(r)).filter(r => r).join('、');
 
     const displayRegion = regions || '台北市、新北市';
 
@@ -540,7 +563,7 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
             contents: [
                 {
                     type: 'text',
-                    text: `${index + 1}. ${fav.title || '未知標題'}`,
+                    text: `${index + 1}. ${sanitizeText(fav.title) || '未知標題'}`,
                     weight: 'bold',
                     size: 'sm',
                     wrap: true,
@@ -560,7 +583,7 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
                     layout: 'horizontal',
                     contents: [
                         { type: 'text', text: '📍', size: 'sm', flex: 0 },
-                        { type: 'text', text: fav.address || '未知地址', size: 'xs', color: '#666666', margin: 'sm', wrap: true }
+                        { type: 'text', text: sanitizeText(fav.address) || '未知地址', size: 'xs', color: '#666666', margin: 'sm', wrap: true }
                     ],
                     margin: 'sm'
                 },
@@ -569,7 +592,7 @@ async function sendMyFavorites(userId, favorites, replyToken = null, gasWebAppUr
                     layout: 'horizontal',
                     contents: [
                         { type: 'text', text: '📞', size: 'sm', flex: 0 },
-                        { type: 'text', text: fav.phone || '無電話', size: 'xs', color: '#666666', margin: 'sm' }
+                        { type: 'text', text: sanitizeText(fav.phone) || '無電話', size: 'xs', color: '#666666', margin: 'sm' }
                     ],
                     margin: 'sm'
                 }
@@ -748,5 +771,6 @@ module.exports = {
     sendUserSettings,
     sendMyFavorites,
     sendWeeklyReport,
+    sanitizeText,
     config
 };
